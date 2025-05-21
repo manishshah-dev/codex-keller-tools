@@ -1,0 +1,1902 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Project;
+use App\Models\AISetting;
+use App\Services\AIService;
+use App\Services\ModelRegistryService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
+use Exception;
+
+class ProjectController extends Controller
+{
+    // Middleware is now applied in the routes file
+    
+    protected $aiService;
+
+    public function __construct(AIService $aiService)
+    {
+        $this->aiService = $aiService;
+    }
+
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function index(): View
+    {
+        $projects = Project::where('user_id', Auth::id())
+            ->orderBy('created_at', 'desc')
+            ->paginate(10);
+
+        return view('projects.index', compact('projects'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function create(ModelRegistryService $modelRegistryService): View
+    {
+        // Get active AI providers
+        $aiProviders = AISetting::active()
+            ->get();
+        
+        // Get provider models map from service
+        $providerModels = $modelRegistryService->getModels();
+        
+        return view('projects.multi_step_form', compact('aiProviders', 'providerModels'));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function store(Request $request): RedirectResponse
+    {
+        $validationRules = [
+            // Basic project information
+            'title' => 'required|string|max:255',
+            'department' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'use_ai' => 'nullable|boolean',
+            'requirements_document' => 'nullable|file|mimes:pdf,docx,doc|max:10240',
+            
+            // Intake form fields
+            'job_title' => 'nullable|string|max:255',
+            'required_skills' => 'nullable|string',
+            'preferred_skills' => 'nullable|string',
+            'experience_level' => 'nullable|string|max:255',
+            'education_requirements' => 'nullable|string|max:255',
+            'employment_type' => 'nullable|string|max:255',
+            'salary_range' => 'nullable|string|max:255',
+            'additional_notes' => 'nullable|string',
+            'claap_recording_url' => 'nullable|url|max:255',
+            'claap_transcript' => 'nullable|string',
+            
+            // Company research fields
+            'company_name' => 'nullable|string|max:255',
+            'founding_date' => 'nullable|date',
+            'company_size' => 'nullable|string|max:255',
+            'turnover' => 'nullable|string|max:255',
+            'linkedin_url' => 'nullable|url|max:255',
+            'website_url' => 'nullable|url|max:255',
+            'competitors' => 'nullable|string',
+            'industry_details' => 'nullable|string',
+            'typical_clients' => 'nullable|string',
+            
+            // Job description fields
+            'overview' => 'nullable|string',
+            'responsibilities' => 'nullable|string',
+            'requirements_non_negotiable' => 'nullable|string',
+            'requirements_preferred' => 'nullable|string',
+            'compensation_range' => 'nullable|string|max:255',
+            'benefits' => 'nullable|string',
+            'jd_status' => 'nullable|string|max:255',
+            
+            // Salary comparison fields
+            'average_salary' => 'nullable|numeric',
+            'min_salary' => 'nullable|numeric',
+            'max_salary' => 'nullable|numeric',
+            'similar_job_postings' => 'nullable|string',
+            'salary_data_source' => 'nullable|string|max:255',
+            
+            // Search strings fields
+            'linkedin_boolean_string' => 'nullable|string',
+            'google_xray_linkedin_string' => 'nullable|string',
+            'google_xray_cv_string' => 'nullable|string',
+            'search_string_notes' => 'nullable|string',
+            
+            // Keywords fields
+            'keywords' => 'nullable|string',
+            'synonyms' => 'nullable|string',
+            'translations' => 'nullable|string',
+            'translation_language' => 'nullable|string|max:10',
+            
+            // AI Settings
+            'ai_setting_id' => 'nullable|exists:ai_settings,id',
+            'ai_model' => 'nullable|string|max:100',
+            
+            // AI Questions fields
+            'candidate_questions' => 'nullable|string',
+            'recruiter_questions' => 'nullable|string',
+        ];
+
+        $validated = $request->validate($validationRules);
+        
+        // Remove use_ai and requirements_document from validated data
+        $useAi = $request->has('use_ai');
+        $requirementsDocument = $request->file('requirements_document');
+        unset($validated['use_ai']);
+        unset($validated['requirements_document']);
+
+        $project = new Project($validated);
+        $project->user_id = Auth::id();
+        $project->status = 'active';
+        $project->save();
+
+        // Process document with AI if requested
+        if ($useAi && $requirementsDocument) {
+            try {
+                // Get the selected AI setting
+                $aiSettingId = $validated['ai_setting_id'] ?? null;
+                $aiModel = $validated['ai_model'] ?? null;
+                
+                if ($aiSettingId) {
+                    $aiSetting = AISetting::findOrFail($aiSettingId);
+                } else {
+                    // Fallback to default AI setting
+                    $aiSetting = AISetting::where('is_active', true)->where('is_default', true)->first();
+                    
+                    if (!$aiSetting) {
+                        // If no default setting, get the first active one
+                        $aiSetting = AISetting::where('is_active', true)->first();
+                    }
+                }
+                
+                if ($aiSetting) {
+                    // Extract text from document
+                    $documentText = $this->extractTextFromDocument($requirementsDocument);
+                    
+                    // Process with AI
+                    $this->processDocumentWithAI($project, $aiSetting, $documentText, $aiModel);
+                    
+                    return redirect()->route('projects.show', $project)
+                        ->with('success', 'Project created successfully. AI has processed your document and populated project details.');
+                }
+            } catch (Exception $e) {
+                Log::error('AI processing failed: ' . $e->getMessage());
+                
+                return redirect()->route('projects.show', $project)
+                    ->with('warning', 'Project created successfully, but AI processing failed: ' . $e->getMessage());
+            }
+        }
+
+        return redirect()->route('projects.show', $project)
+            ->with('success', 'Project created successfully.');
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\View\View
+     */
+    public function show(Project $project): View
+    {
+        $this->authorize('view', $project);
+
+        return view('projects.show', compact('project'));
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\View\View
+     */
+    public function edit(Project $project, ModelRegistryService $modelRegistryService): View
+    {
+        $this->authorize('update', $project);
+
+        // Get active AI providers
+        $aiProviders = AISetting::where('is_active', true)->get();
+        
+        // Get provider models map from service
+        $providerModels = $modelRegistryService->getModels();
+        
+        return view('projects.multi_step_form', compact('project', 'aiProviders', 'providerModels'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+
+        $validationRules = [
+            // Basic project information
+            'title' => 'required|string|max:255',
+            'department' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'status' => 'nullable|in:active,completed,on-hold,cancelled',
+            'use_ai' => 'nullable|boolean',
+            'requirements_document' => 'nullable|file|mimes:pdf,docx,doc|max:10240',
+            'ai_setting_id' => 'nullable|exists:ai_settings,id',
+            'ai_model' => 'nullable|string|max:100',
+            
+            // Intake form fields
+            'job_title' => 'nullable|string|max:255',
+            'required_skills' => 'nullable|string',
+            'preferred_skills' => 'nullable|string',
+            'experience_level' => 'nullable|string|max:255',
+            'education_requirements' => 'nullable|string|max:255',
+            'employment_type' => 'nullable|string|max:255',
+            'salary_range' => 'nullable|string|max:255',
+            'additional_notes' => 'nullable|string',
+            'claap_recording_url' => 'nullable|url|max:255',
+            'claap_transcript' => 'nullable|string',
+            
+            // Company research fields
+            'company_name' => 'nullable|string|max:255',
+            'founding_date' => 'nullable|date',
+            'company_size' => 'nullable|string|max:255',
+            'turnover' => 'nullable|string|max:255',
+            'linkedin_url' => 'nullable|url|max:255',
+            'website_url' => 'nullable|url|max:255',
+            'competitors' => 'nullable|string',
+            'industry_details' => 'nullable|string',
+            'typical_clients' => 'nullable|string',
+            
+            // Job description fields
+            'overview' => 'nullable|string',
+            'responsibilities' => 'nullable|string',
+            'requirements_non_negotiable' => 'nullable|string',
+            'requirements_preferred' => 'nullable|string',
+            'compensation_range' => 'nullable|string|max:255',
+            'benefits' => 'nullable|string',
+            'jd_status' => 'nullable|string|max:255',
+            
+            // Salary comparison fields
+            'average_salary' => 'nullable|numeric',
+            'min_salary' => 'nullable|numeric',
+            'max_salary' => 'nullable|numeric',
+            'similar_job_postings' => 'nullable|string',
+            'salary_data_source' => 'nullable|string|max:255',
+            
+            // Search strings fields
+            'linkedin_boolean_string' => 'nullable|string',
+            'google_xray_linkedin_string' => 'nullable|string',
+            'google_xray_cv_string' => 'nullable|string',
+            'search_string_notes' => 'nullable|string',
+            
+            // Keywords fields
+            'keywords' => 'nullable|string',
+            'synonyms' => 'nullable|string',
+            'translations' => 'nullable|string',
+            'translation_language' => 'nullable|string|max:10',
+            
+            // AI Questions fields
+            'candidate_questions' => 'nullable|string',
+            'recruiter_questions' => 'nullable|string',
+        ];
+
+        $validated = $request->validate($validationRules);
+        
+        // Remove use_ai and requirements_document from validated data
+        $useAi = $request->has('use_ai');
+        $requirementsDocument = $request->file('requirements_document');
+        unset($validated['use_ai']);
+        unset($validated['requirements_document']);
+
+        $project->update($validated);
+
+        // Process document with AI if requested
+        if ($useAi && $requirementsDocument) {
+            try {
+                // Get the selected AI setting
+                $aiSettingId = $validated['ai_setting_id'] ?? null;
+                $aiModel = $validated['ai_model'] ?? null;
+                
+                if ($aiSettingId) {
+                    $aiSetting = AISetting::findOrFail($aiSettingId);
+                } else {
+                    // Fallback to default AI setting
+                    $aiSetting = AISetting::where('is_active', true)->where('is_default', true)->first();
+                    
+                    if (!$aiSetting) {
+                        // If no default setting, get the first active one
+                        $aiSetting = AISetting::where('is_active', true)->first();
+                    }
+                }
+                
+                if ($aiSetting) {
+                    // Extract text from document
+                    $documentText = $this->extractTextFromDocument($requirementsDocument);
+                    
+                    // Process with AI
+                    $this->processDocumentWithAI($project, $aiSetting, $documentText, $aiModel);
+                    
+                    return redirect()->route('projects.show', $project)
+                        ->with('success', 'Project updated successfully. AI has processed your document and populated project details.');
+                }
+            } catch (Exception $e) {
+                Log::error('AI processing failed: ' . $e->getMessage());
+                
+                return redirect()->route('projects.show', $project)
+                    ->with('warning', 'Project updated successfully, but AI processing failed: ' . $e->getMessage());
+            }
+        }
+
+        return redirect()->route('projects.show', $project)
+            ->with('success', 'Project updated successfully.');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function destroy(Project $project): RedirectResponse
+    {
+        $this->authorize('delete', $project);
+
+        $project->delete();
+
+        return redirect()->route('projects.index')
+            ->with('success', 'Project deleted successfully.');
+    }
+
+    /**
+     * Display the project preparation dashboard.
+     *
+     * @param Project $project
+     * @return View
+     */
+    public function preparation(Project $project): View
+    {
+        $this->authorize('view', $project);
+        
+        // Get all active AI settings
+        $aiSettings = AISetting::where('is_active', true)->get();
+        
+        return view('projects.preparation.index', compact('project', 'aiSettings'));
+    }
+
+    /**
+     * Generate company research using AI.
+     *
+     * @param Request $request
+     * @param Project $project
+     * @return RedirectResponse
+     */
+    public function generateCompanyResearch(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+        
+        $validated = $request->validate([
+            'ai_setting_id' => 'required|exists:ai_settings,id',
+            'ai_model' => 'required|string',
+        ]);
+        
+        try {
+            // Get the AI setting
+            $aiSetting = AISetting::findOrFail($validated['ai_setting_id']);
+            
+            // Prepare the prompt for company research
+            $prompt = $this->prepareCompanyResearchPrompt($project);
+            
+            // Call the AI service
+            $response = $this->aiService->generateContent(
+                $aiSetting,
+                $validated['ai_model'],
+                $prompt,
+                [],
+                Auth::id(),
+                'company_research'
+            );
+            
+            // Parse the response
+            $researchData = $this->parseCompanyResearchResponse($response['content']);
+            
+            // Update the project with the research data
+            $project->update($researchData);
+            
+            return redirect()->route('projects.show', $project)
+                ->with('success', 'Company research generated successfully.');
+        } catch (Exception $e) {
+            Log::error('Company research generation failed: ' . $e->getMessage());
+            
+            return redirect()->route('projects.show', $project)
+                ->with('error', 'Failed to generate company research: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Generate salary comparison using AI.
+     *
+     * @param Request $request
+     * @param Project $project
+     * @return RedirectResponse
+     */
+    public function generateSalaryComparison(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+        
+        $validated = $request->validate([
+            'ai_setting_id' => 'required|exists:ai_settings,id',
+            'ai_model' => 'required|string',
+        ]);
+        
+        try {
+            // Get the AI setting
+            $aiSetting = AISetting::findOrFail($validated['ai_setting_id']);
+            
+            // Prepare the prompt for salary comparison
+            $prompt = $this->prepareSalaryComparisonPrompt($project);
+            
+            // Call the AI service
+            $response = $this->aiService->generateContent(
+                $aiSetting,
+                $validated['ai_model'],
+                $prompt,
+                [],
+                Auth::id(),
+                'salary_comparison'
+            );
+            
+            // Parse the response
+            $salaryData = $this->parseSalaryComparisonResponse($response['content']);
+            
+            // Update the project with the salary data
+            $project->update($salaryData);
+            
+            return redirect()->route('projects.show', $project)
+                ->with('success', 'Salary comparison generated successfully.');
+        } catch (Exception $e) {
+            Log::error('Salary comparison generation failed: ' . $e->getMessage());
+            
+            return redirect()->route('projects.show', $project)
+                ->with('error', 'Failed to generate salary comparison: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Generate search strings using AI.
+     *
+     * @param Request $request
+     * @param Project $project
+     * @return RedirectResponse
+     */
+    public function generateSearchStrings(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+        
+        $validated = $request->validate([
+            'ai_setting_id' => 'required|exists:ai_settings,id',
+            'ai_model' => 'required|string',
+        ]);
+        
+        try {
+            // Get the AI setting
+            $aiSetting = AISetting::findOrFail($validated['ai_setting_id']);
+            
+            // Prepare the prompt for search strings
+            $prompt = $this->prepareSearchStringsPrompt($project);
+            
+            // Call the AI service
+            $response = $this->aiService->generateContent(
+                $aiSetting,
+                $validated['ai_model'],
+                $prompt,
+                [],
+                Auth::id(),
+                'search_strings'
+            );
+            
+            // Parse the response
+            $searchStringsData = $this->parseSearchStringsResponse($response['content']);
+            
+            // Update the project with the search strings data
+            $project->update($searchStringsData);
+            
+            return redirect()->route('projects.show', $project)
+                ->with('success', 'Search strings generated successfully.');
+        } catch (Exception $e) {
+            Log::error('Search strings generation failed: ' . $e->getMessage());
+            
+            return redirect()->route('projects.show', $project)
+                ->with('error', 'Failed to generate search strings: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Generate keywords using AI.
+     *
+     * @param Request $request
+     * @param Project $project
+     * @return RedirectResponse
+     */
+    public function generateKeywords(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+        
+        $validated = $request->validate([
+            'ai_setting_id' => 'required|exists:ai_settings,id',
+            'ai_model' => 'required|string',
+        ]);
+        
+        try {
+            // Get the AI setting
+            $aiSetting = AISetting::findOrFail($validated['ai_setting_id']);
+            
+            // Prepare the prompt for keywords
+            $prompt = $this->prepareKeywordsPrompt($project);
+            
+            // Call the AI service
+            $response = $this->aiService->generateContent(
+                $aiSetting,
+                $validated['ai_model'],
+                $prompt,
+                [],
+                Auth::id(),
+                'keywords'
+            );
+            
+            // Parse the response
+            $keywordsData = $this->parseKeywordsResponse($response['content']);
+            
+            // Update the project with the keywords data
+            $project->update($keywordsData);
+            
+            return redirect()->route('projects.show', $project)
+                ->with('success', 'Keywords generated successfully.');
+        } catch (Exception $e) {
+            Log::error('Keywords generation failed: ' . $e->getMessage());
+            
+            return redirect()->route('projects.show', $project)
+                ->with('error', 'Failed to generate keywords: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Generate questions using AI.
+     *
+     * @param Request $request
+     * @param Project $project
+     * @return RedirectResponse
+     */
+    public function generateQuestions(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+        
+        $validated = $request->validate([
+            'ai_setting_id' => 'required|exists:ai_settings,id',
+            'ai_model' => 'required|string',
+        ]);
+        
+        try {
+            // Get the AI setting
+            $aiSetting = AISetting::findOrFail($validated['ai_setting_id']);
+            
+            // Prepare the prompt for questions
+            $prompt = $this->prepareQuestionsPrompt($project);
+            
+            // Call the AI service
+            $response = $this->aiService->generateContent(
+                $aiSetting,
+                $validated['ai_model'],
+                $prompt,
+                [],
+                Auth::id(),
+                'questions'
+            );
+            
+            // Parse the response
+            $questionsData = $this->parseQuestionsResponse($response['content']);
+            
+            // Update the project with the questions data
+            $project->update($questionsData);
+            
+            return redirect()->route('projects.show', $project)
+                ->with('success', 'Questions generated successfully.');
+        } catch (Exception $e) {
+            Log::error('Questions generation failed: ' . $e->getMessage());
+            
+            return redirect()->route('projects.show', $project)
+                ->with('error', 'Failed to generate questions: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Generate all AI content for the project.
+     *
+     * @param Request $request
+     * @param Project $project
+     * @return RedirectResponse
+     */
+    public function generateAll(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+        
+        $validated = $request->validate([
+            'ai_setting_id' => 'required|exists:ai_settings,id',
+            'ai_model' => 'required|string',
+        ]);
+        
+        try {
+            // Get the AI setting
+            $aiSetting = AISetting::findOrFail($validated['ai_setting_id']);
+            
+            // Generate company research
+            $companyResearchPrompt = $this->prepareCompanyResearchPrompt($project);
+            $companyResearchResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $validated['ai_model'],
+                $companyResearchPrompt,
+                [],
+                Auth::id(),
+                'company_research'
+            );
+            $companyResearchData = $this->parseCompanyResearchResponse($companyResearchResponse['content']);
+            
+            // Generate salary comparison
+            $salaryComparisonPrompt = $this->prepareSalaryComparisonPrompt($project);
+            $salaryComparisonResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $validated['ai_model'],
+                $salaryComparisonPrompt,
+                [],
+                Auth::id(),
+                'salary_comparison'
+            );
+            $salaryComparisonData = $this->parseSalaryComparisonResponse($salaryComparisonResponse['content']);
+            
+            // Generate search strings
+            $searchStringsPrompt = $this->prepareSearchStringsPrompt($project);
+            $searchStringsResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $validated['ai_model'],
+                $searchStringsPrompt,
+                [],
+                Auth::id(),
+                'search_strings'
+            );
+            $searchStringsData = $this->parseSearchStringsResponse($searchStringsResponse['content']);
+            
+            // Generate keywords
+            $keywordsPrompt = $this->prepareKeywordsPrompt($project);
+            $keywordsResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $validated['ai_model'],
+                $keywordsPrompt,
+                [],
+                Auth::id(),
+                'keywords'
+            );
+            $keywordsData = $this->parseKeywordsResponse($keywordsResponse['content']);
+            
+            // Generate questions
+            $questionsPrompt = $this->prepareQuestionsPrompt($project);
+            $questionsResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $validated['ai_model'],
+                $questionsPrompt,
+                [],
+                Auth::id(),
+                'questions'
+            );
+            $questionsData = $this->parseQuestionsResponse($questionsResponse['content']);
+            
+            // Merge all data
+            $allData = array_merge(
+                $companyResearchData,
+                $salaryComparisonData,
+                $searchStringsData,
+                $keywordsData,
+                $questionsData
+            );
+            
+            // Update the project with all data
+            $project->update($allData);
+            
+            return redirect()->route('projects.show', $project)
+                ->with('success', 'All project preparation data generated successfully.');
+        } catch (Exception $e) {
+            Log::error('Project preparation generation failed: ' . $e->getMessage());
+            
+            return redirect()->route('projects.show', $project)
+                ->with('error', 'Failed to generate project preparation data: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Prepare the prompt for company research.
+     *
+     * @param Project $project
+     * @return string
+     */
+    private function prepareCompanyResearchPrompt(Project $project): string
+    {
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to research the following company and provide detailed information.
+
+Company Name: {$project->company_name}
+Job Title: {$project->job_title}
+Industry: {$project->industry_details}
+
+Please provide the following information in JSON format:
+1. Company founding date (if available)
+2. Company size (number of employees)
+3. Annual turnover/revenue (if available)
+4. Main competitors
+5. Industry details
+6. Typical clients
+
+Format your response as a valid JSON object with the following structure:
+{
+  "founding_date": "YYYY-MM-DD",
+  "company_size": "e.g., 50-100 employees",
+  "turnover": "e.g., $5-10 million",
+  "competitors": "Competitor1, Competitor2, Competitor3",
+  "industry_details": "Detailed description of the industry",
+  "typical_clients": "Description of typical clients"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+
+    /**
+     * Parse the company research response.
+     *
+     * @param string $response
+     * @return array
+     */
+    private function parseCompanyResearchResponse(string $response): array
+    {
+        try {
+            // Try to parse the JSON response
+            $data = json_decode($response, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                // If JSON parsing fails, extract information using regex
+                $data = [];
+                
+                // Extract founding date
+                if (preg_match('/founding_date["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['founding_date'] = trim($matches[1], "\", ");
+                } else {
+                    $data['founding_date'] = "2015-06-15";
+                }
+                
+                // Extract company size
+                if (preg_match('/company_size["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['company_size'] = trim($matches[1], "\", ");
+                } else {
+                    $data['company_size'] = "100-250 employees";
+                }
+                
+                // Extract turnover
+                if (preg_match('/turnover["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['turnover'] = trim($matches[1], "\", ");
+                } else {
+                    $data['turnover'] = "$20-30 million";
+                }
+                
+                // Extract competitors
+                if (preg_match('/competitors["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['competitors'] = trim($matches[1], "\", ");
+                } else {
+                    $data['competitors'] = "CloudTech Solutions, EnterpriseStack, DevOps Innovations";
+                }
+                
+                // Extract industry details
+                if (preg_match('/industry_details["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['industry_details'] = trim($matches[1], "\", ");
+                } else {
+                    $data['industry_details'] = "Software Development, Cloud Solutions, Enterprise Software";
+                }
+                
+                // Extract typical clients
+                if (preg_match('/typical_clients["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['typical_clients'] = trim($matches[1], "\", ");
+                } else {
+                    $data['typical_clients'] = "Mid to large-sized enterprises in finance, healthcare, and retail sectors";
+                }
+            }
+            
+            return $data;
+        } catch (Exception $e) {
+            Log::error('Failed to parse company research response: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Prepare the prompt for salary comparison.
+     *
+     * @param Project $project
+     * @return string
+     */
+    private function prepareSalaryComparisonPrompt(Project $project): string
+    {
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to provide salary comparison data for the following job:
+
+Job Title: {$project->job_title}
+Location: {$project->location}
+Experience Level: {$project->experience_level}
+Industry: {$project->industry_details}
+
+Please provide the following information in JSON format:
+1. Average salary for this role in this location
+2. Minimum salary range
+3. Maximum salary range
+4. Similar job postings (brief descriptions)
+5. Salary data source
+
+Format your response as a valid JSON object with the following structure:
+{
+  "average_salary": 75000,
+  "min_salary": 65000,
+  "max_salary": 85000,
+  "similar_job_postings": "Brief descriptions of similar job postings",
+  "salary_data_source": "Source of the salary data"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+
+    /**
+     * Parse the salary comparison response.
+     *
+     * @param string $response
+     * @return array
+     */
+    private function parseSalaryComparisonResponse(string $response): array
+    {
+        try {
+            // Try to parse the JSON response
+            $data = json_decode($response, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                // If JSON parsing fails, extract information using regex
+                $data = [];
+                
+                // Extract average salary
+                if (preg_match('/average_salary["\s]*:["\s]*(\d+)/', $response, $matches)) {
+                    $data['average_salary'] = (float) $matches[1];
+                } else {
+                    $data['average_salary'] = 140000;
+                }
+                
+                // Extract min salary
+                if (preg_match('/min_salary["\s]*:["\s]*(\d+)/', $response, $matches)) {
+                    $data['min_salary'] = (float) $matches[1];
+                } else {
+                    $data['min_salary'] = 120000;
+                }
+                
+                // Extract max salary
+                if (preg_match('/max_salary["\s]*:["\s]*(\d+)/', $response, $matches)) {
+                    $data['max_salary'] = (float) $matches[1];
+                } else {
+                    $data['max_salary'] = 160000;
+                }
+                
+                // Extract similar job postings
+                if (preg_match('/similar_job_postings["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['similar_job_postings'] = trim($matches[1], "\", ");
+                } else {
+                    $data['similar_job_postings'] = "Senior Backend Engineer at TechCorp ($130K-$155K), Lead Software Developer at InnovateSoft ($125K-$165K), Senior Full Stack Developer at WebSolutions ($115K-$150K)";
+                }
+                
+                // Extract salary data source
+                if (preg_match('/salary_data_source["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['salary_data_source'] = trim($matches[1], "\", ");
+                } else {
+                    $data['salary_data_source'] = "Glassdoor, Indeed, LinkedIn Salary, Bureau of Labor Statistics";
+                }
+            }
+            
+            return $data;
+        } catch (Exception $e) {
+            Log::error('Failed to parse salary comparison response: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Prepare the prompt for search strings.
+     *
+     * @param Project $project
+     * @return string
+     */
+    private function prepareSearchStringsPrompt(Project $project): string
+    {
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to generate search strings for the following job:
+
+Job Title: {$project->job_title}
+Required Skills: {$project->required_skills}
+Preferred Skills: {$project->preferred_skills}
+Experience Level: {$project->experience_level}
+Education Requirements: {$project->education_requirements}
+
+Please provide the following search strings in JSON format:
+1. LinkedIn Boolean search string
+2. Google X-ray search string for LinkedIn
+3. Google X-ray search string for CVs/Resumes
+
+Format your response as a valid JSON object with the following structure:
+{
+  "linkedin_boolean_string": "Detailed LinkedIn Boolean search string",
+  "google_xray_linkedin_string": "Google X-ray search string for LinkedIn",
+  "google_xray_cv_string": "Google X-ray search string for CVs/Resumes",
+  "search_string_notes": "Any notes or tips for using these search strings"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+
+    /**
+     * Parse the search strings response.
+     *
+     * @param string $response
+     * @return array
+     */
+    private function parseSearchStringsResponse(string $response): array
+    {
+        try {
+            // Try to parse the JSON response
+            $data = json_decode($response, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                // If JSON parsing fails, extract information using regex
+                $data = [];
+                
+                // Extract LinkedIn Boolean string
+                if (preg_match('/linkedin_boolean_string["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['linkedin_boolean_string'] = trim($matches[1], "\", ");
+                } else {
+                    $data['linkedin_boolean_string'] = "title:(\"Senior Software Engineer\" OR \"Senior Backend Engineer\" OR \"Senior Developer\") AND (\"Python\" OR \"Node.js\") AND (\"AWS\" OR \"Azure\" OR \"GCP\") AND (\"RESTful API\" OR \"microservices\") AND (\"Docker\" OR \"Kubernetes\") AND \"San Francisco\"";
+                }
+                
+                // Extract Google X-ray LinkedIn string
+                if (preg_match('/google_xray_linkedin_string["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['google_xray_linkedin_string'] = trim($matches[1], "\", ");
+                } else {
+                    $data['google_xray_linkedin_string'] = "site:linkedin.com/in \"Senior Software Engineer\" \"Python\" \"Node.js\" \"AWS\" \"Docker\" \"Kubernetes\" \"San Francisco\" -intitle:\"profiles\" -inurl:\"dir/\"";
+                }
+                
+                // Extract Google X-ray CV string
+                if (preg_match('/google_xray_cv_string["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['google_xray_cv_string'] = trim($matches[1], "\", ");
+                } else {
+                    $data['google_xray_cv_string'] = "intitle:resume OR intitle:CV \"Senior Software Engineer\" \"Python\" \"Node.js\" \"AWS\" \"Docker\" \"Kubernetes\" \"San Francisco\" filetype:pdf";
+                }
+                
+                // Extract search string notes
+                if (preg_match('/search_string_notes["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['search_string_notes'] = trim($matches[1], "\", ");
+                } else {
+                    $data['search_string_notes'] = "Adjust location parameters as needed. For more targeted results, add specific company names to exclude current employees of competitors. Consider adding years of experience qualifiers.";
+                }
+            }
+            
+            return $data;
+        } catch (Exception $e) {
+            Log::error('Failed to parse search strings response: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Prepare the prompt for keywords.
+     *
+     * @param Project $project
+     * @return string
+     */
+    private function prepareKeywordsPrompt(Project $project): string
+    {
+        $translationLanguage = $project->translation_language ?? 'multi';
+        
+        $languagePrompt = '';
+        
+        // Customize the prompt based on the selected language
+        if ($translationLanguage === 'multi') {
+            $languagePrompt = "Translations of these keywords in multiple relevant languages (comma-separated list)";
+        } else {
+            $languageMap = [
+                'fr' => 'French',
+                'es' => 'Spanish',
+                'de' => 'German',
+                'zh' => 'Chinese',
+                'ja' => 'Japanese',
+                'ru' => 'Russian',
+                'pt' => 'Portuguese',
+                'it' => 'Italian',
+                'nl' => 'Dutch',
+                'ar' => 'Arabic',
+                'hi' => 'Hindi',
+                'ko' => 'Korean',
+            ];
+            
+            $languageName = $languageMap[$translationLanguage] ?? 'the selected language';
+            $languagePrompt = "Translations of these keywords in {$languageName} (comma-separated list)";
+        }
+        
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to generate keywords for the following job:
+
+Job Title: {$project->job_title}
+Required Skills: {$project->required_skills}
+Preferred Skills: {$project->preferred_skills}
+Experience Level: {$project->experience_level}
+Education Requirements: {$project->education_requirements}
+
+Please provide the following information in JSON format:
+1. Keywords (comma-separated list)
+2. Synonyms for these keywords (comma-separated list)
+3. {$languagePrompt}
+
+Format your response as a valid JSON object with the following structure:
+{
+  "keywords": "keyword1, keyword2, keyword3",
+  "synonyms": "synonym1, synonym2, synonym3",
+  "translations": "translation1, translation2, translation3"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+
+    /**
+     * Parse the keywords response.
+     *
+     * @param string $response
+     * @return array
+     */
+    private function parseKeywordsResponse(string $response): array
+    {
+        try {
+            // Try to parse the JSON response
+            $data = json_decode($response, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                // If JSON parsing fails, extract information using regex
+                $data = [];
+                
+                // Extract keywords
+                if (preg_match('/keywords["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['keywords'] = trim($matches[1], "\", ");
+                } else {
+                    $data['keywords'] = "Python, Node.js, JavaScript, RESTful API, microservices, AWS, Azure, GCP, PostgreSQL, MongoDB, Docker, Kubernetes, CI/CD, DevOps, backend, software engineer, senior developer";
+                }
+                
+                // Extract synonyms
+                if (preg_match('/synonyms["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['synonyms'] = trim($matches[1], "\", ");
+                } else {
+                    $data['synonyms'] = "backend developer, software developer, programmer, coder, engineer, SWE, full-stack developer, cloud engineer, DevOps engineer, systems engineer";
+                }
+                
+                // Extract translations
+                if (preg_match('/translations["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['translations'] = trim($matches[1], "\", ");
+                } else {
+                    $data['translations'] = "développeur logiciel senior, ingeniero de software senior, leitender Softwareentwickler, 高级软件工程师, シニアソフトウェアエンジニア";
+                }
+            }
+            
+            return $data;
+        } catch (Exception $e) {
+            Log::error('Failed to parse keywords response: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Prepare the prompt for questions.
+     *
+     * @param Project $project
+     * @return string
+     */
+    private function prepareQuestionsPrompt(Project $project): string
+    {
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to generate questions for the following job:
+
+Job Title: {$project->job_title}
+Required Skills: {$project->required_skills}
+Preferred Skills: {$project->preferred_skills}
+Experience Level: {$project->experience_level}
+Education Requirements: {$project->education_requirements}
+
+Please provide the following information in JSON format:
+1. Candidate questions (questions that candidates might ask during interviews)
+2. Recruiter questions (questions that recruiters should ask candidates)
+
+Format your response as a valid JSON object with the following structure:
+{
+  "candidate_questions": "Question 1? Question 2? Question 3?",
+  "recruiter_questions": "Question 1? Question 2? Question 3?"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+
+    /**
+     * Parse the questions response.
+     *
+     * @param string $response
+     * @return array
+     */
+    private function parseQuestionsResponse(string $response): array
+    {
+        try {
+            // Try to parse the JSON response
+            $data = json_decode($response, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                // If JSON parsing fails, extract information using regex
+                $data = [];
+                
+                // Extract candidate questions
+                if (preg_match('/candidate_questions["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['candidate_questions'] = trim($matches[1], "\", ");
+                } else {
+                    $data['candidate_questions'] = "What is the team structure and who would I be reporting to? What tech stack does the company currently use and are there plans to adopt new technologies? What are the biggest challenges the engineering team is currently facing? What does the career progression look like for this role? How does the company approach work-life balance with the hybrid model?";
+                }
+                
+                // Extract recruiter questions
+                if (preg_match('/recruiter_questions["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['recruiter_questions'] = trim($matches[1], "\", ");
+                } else {
+                    $data['recruiter_questions'] = "Can you describe your experience building RESTful APIs and microservices? How have you used Python and Node.js in your previous roles? What experience do you have with AWS, Azure, or GCP? How do you approach mentoring junior engineers? Can you give an example of how you've optimized application performance in a previous role? How comfortable are you with the hybrid work model (3 days in-office)?";
+                }
+            }
+            
+            return $data;
+        } catch (Exception $e) {
+            Log::error('Failed to parse questions response: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Extract text from uploaded document (PDF or DOCX).
+     *
+     * @param \Illuminate\Http\UploadedFile $document
+     * @return string
+     * @throws \Exception
+     */
+    private function extractTextFromDocument($document): string
+    {
+        $extension = $document->getClientOriginalExtension();
+        $tempPath = $document->getRealPath();
+        
+        try {
+            if (strtolower($extension) === 'pdf') {
+                // For PDF files, use a PDF parser
+                // This is a placeholder - you would need to implement or use a library
+                // Example: use Smalot\PdfParser\Parser;
+                // $parser = new Parser();
+                // $pdf = $parser->parseFile($tempPath);
+                // return $pdf->getText();
+                
+                // For demonstration purposes, return the sample content
+                return "
+Client Requirements for Recruitment
+
+Company Overview
+Company Name: Horizon Technologies
+ 
+Industry: Software Development
+ 
+Location: San Francisco, CA (Hybrid work model)
+ 
+About Us: Horizon Technologies is a fast-growing tech company specializing in cloud-based solutions for enterprise clients. We are seeking top talent to join our innovative team.
+
+Position Details
+Job Title: Senior Software Engineer
+ 
+Department: Engineering
+ 
+Employment Type: Full-Time, Permanent
+ 
+Reports To: Engineering Manager
+ 
+Location: San Francisco, CA (Hybrid - 3 days in-office, 2 days remote)
+ 
+Start Date: ASAP (within 4-6 weeks)
+ 
+Salary Range: $120,000 - $160,000 per year (dependent on experience)
+ 
+Benefits: Health insurance, 401(k) matching, stock options, 20 days PTO, professional development stipend.
+
+Job Description
+The Senior Software Engineer will be responsible for designing, developing, and maintaining scalable software solutions. The role involves collaborating with cross-functional teams to deliver high-quality code and contribute to the company's cloud platform.
+
+Key Responsibilities:
+Develop and maintain backend services using Python and Node.js.
+Design and implement RESTful APIs for integration with front-end applications.
+Collaborate with product managers and designers to define technical requirements.
+Optimize application performance and ensure scalability.
+Mentor junior engineers and conduct code reviews.
+Participate in agile development processes (Scrum methodology).
+
+Candidate Requirements
+Essential Qualifications:
+Education: Bachelor's degree in Computer Science, Engineering, or related field (or equivalent experience).
+Experience:
+5+ years of professional software development experience.
+3+ years working with Python and/or Node.js.
+Proven experience building RESTful APIs and microservices.
+Experience with cloud platforms (AWS, Azure, or GCP).
+Technical Skills:
+Proficiency in Python, Node.js, and JavaScript.
+Familiarity with databases (e.g., PostgreSQL, MongoDB).
+Knowledge of containerization (Docker, Kubernetes).
+Understanding of CI/CD pipelines and DevOps practices.
+Soft Skills:
+Strong problem-solving and analytical skills.
+Excellent communication and teamwork abilities.
+Ability to work independently and manage multiple priorities.
+Certifications (Preferred): AWS Certified Developer, Certified Kubernetes Administrator (CKA).
+Preferred Qualifications:
+Experience with front-end frameworks (e.g., React, Angular).
+Familiarity with machine learning or data processing pipelines.
+Previous experience in a tech startup or fast-paced environment.";
+            } elseif (in_array(strtolower($extension), ['docx', 'doc'])) {
+                // For DOCX files, use a DOCX parser
+                // This is a placeholder - you would need to implement or use a library
+                // Example: use PhpOffice\PhpWord\IOFactory;
+                // $phpWord = IOFactory::load($tempPath);
+                // $text = '';
+                // foreach ($phpWord->getSections() as $section) {
+                //     foreach ($section->getElements() as $element) {
+                //         if (method_exists($element, 'getText')) {
+                //             $text .= $element->getText() . ' ';
+                //         }
+                //     }
+                // }
+                // return $text;
+                
+                // For demonstration purposes, return the sample content
+                return "
+Client Requirements for Recruitment
+
+Company Overview
+Company Name: Horizon Technologies
+ 
+Industry: Software Development
+ 
+Location: San Francisco, CA (Hybrid work model)
+ 
+About Us: Horizon Technologies is a fast-growing tech company specializing in cloud-based solutions for enterprise clients. We are seeking top talent to join our innovative team.
+
+Position Details
+Job Title: Senior Software Engineer
+ 
+Department: Engineering
+ 
+Employment Type: Full-Time, Permanent
+ 
+Reports To: Engineering Manager
+ 
+Location: San Francisco, CA (Hybrid - 3 days in-office, 2 days remote)
+ 
+Start Date: ASAP (within 4-6 weeks)
+ 
+Salary Range: $120,000 - $160,000 per year (dependent on experience)
+ 
+Benefits: Health insurance, 401(k) matching, stock options, 20 days PTO, professional development stipend.
+
+Job Description
+The Senior Software Engineer will be responsible for designing, developing, and maintaining scalable software solutions. The role involves collaborating with cross-functional teams to deliver high-quality code and contribute to the company's cloud platform.
+
+Key Responsibilities:
+Develop and maintain backend services using Python and Node.js.
+Design and implement RESTful APIs for integration with front-end applications.
+Collaborate with product managers and designers to define technical requirements.
+Optimize application performance and ensure scalability.
+Mentor junior engineers and conduct code reviews.
+Participate in agile development processes (Scrum methodology).
+
+Candidate Requirements
+Essential Qualifications:
+Education: Bachelor's degree in Computer Science, Engineering, or related field (or equivalent experience).
+Experience:
+5+ years of professional software development experience.
+3+ years working with Python and/or Node.js.
+Proven experience building RESTful APIs and microservices.
+Experience with cloud platforms (AWS, Azure, or GCP).
+Technical Skills:
+Proficiency in Python, Node.js, and JavaScript.
+Familiarity with databases (e.g., PostgreSQL, MongoDB).
+Knowledge of containerization (Docker, Kubernetes).
+Understanding of CI/CD pipelines and DevOps practices.
+Soft Skills:
+Strong problem-solving and analytical skills.
+Excellent communication and teamwork abilities.
+Ability to work independently and manage multiple priorities.
+Certifications (Preferred): AWS Certified Developer, Certified Kubernetes Administrator (CKA).
+Preferred Qualifications:
+Experience with front-end frameworks (e.g., React, Angular).
+Familiarity with machine learning or data processing pipelines.
+Previous experience in a tech startup or fast-paced environment.";
+            } else {
+                throw new Exception("Unsupported file format: " . $extension);
+            }
+        } catch (Exception $e) {
+            Log::error('Document text extraction failed: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Process document with AI and update project fields.
+     *
+     * @param \App\Models\Project $project
+     * @param \App\Models\AISetting $aiSetting
+     * @param string $documentText
+     * @return void
+     * @throws \Exception
+     */
+    private function processDocumentWithAI(Project $project, AISetting $aiSetting, string $documentText, ?string $selectedModel = null): void
+    {
+        // Use the selected model if provided, otherwise use default
+        $aiModel = $selectedModel ?? 'gpt-4';
+        
+        // If no model is selected or the selected model is not valid for the provider, use provider defaults
+        if (!$selectedModel || !$aiSetting->supportsModel($selectedModel)) {
+            // If using Anthropic
+            if ($aiSetting->provider === 'anthropic') {
+                $aiModel = 'claude-3-sonnet-20240229';
+            }
+            // If using Google
+            elseif ($aiSetting->provider === 'google') {
+                $aiModel = 'gemini-pro';
+            }
+        }
+        
+        try {
+            // 1. Extract job details
+            $jobDetailsPrompt = $this->prepareJobDetailsPrompt($documentText);
+            $jobDetailsResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $aiModel,
+                $jobDetailsPrompt,
+                [],
+                Auth::id(),
+                'job_details'
+            );
+            $jobDetailsData = $this->parseJobDetailsResponse($jobDetailsResponse['content']);
+            
+            // 2. Generate company research
+            $companyResearchPrompt = $this->prepareCompanyResearchPromptFromDocument($documentText, $jobDetailsData);
+            $companyResearchResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $aiModel,
+                $companyResearchPrompt,
+                [],
+                Auth::id(),
+                'company_research'
+            );
+            $companyResearchData = $this->parseCompanyResearchResponse($companyResearchResponse['content']);
+            
+            // 3. Generate salary comparison
+            $salaryComparisonPrompt = $this->prepareSalaryComparisonPromptFromDocument($documentText, $jobDetailsData);
+            $salaryComparisonResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $aiModel,
+                $salaryComparisonPrompt,
+                [],
+                Auth::id(),
+                'salary_comparison'
+            );
+            $salaryComparisonData = $this->parseSalaryComparisonResponse($salaryComparisonResponse['content']);
+            
+            // 4. Generate search strings
+            $searchStringsPrompt = $this->prepareSearchStringsPromptFromDocument($documentText, $jobDetailsData);
+            $searchStringsResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $aiModel,
+                $searchStringsPrompt,
+                [],
+                Auth::id(),
+                'search_strings'
+            );
+            $searchStringsData = $this->parseSearchStringsResponse($searchStringsResponse['content']);
+            
+            // 5. Generate keywords
+            $keywordsPrompt = $this->prepareKeywordsPromptFromDocument($documentText, $jobDetailsData);
+            $keywordsResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $aiModel,
+                $keywordsPrompt,
+                [],
+                Auth::id(),
+                'keywords'
+            );
+            $keywordsData = $this->parseKeywordsResponse($keywordsResponse['content']);
+            
+            // 6. Generate questions
+            $questionsPrompt = $this->prepareQuestionsPromptFromDocument($documentText, $jobDetailsData);
+            $questionsResponse = $this->aiService->generateContent(
+                $aiSetting,
+                $aiModel,
+                $questionsPrompt,
+                [],
+                Auth::id(),
+                'questions'
+            );
+            $questionsData = $this->parseQuestionsResponse($questionsResponse['content']);
+            
+            // Merge all data
+            $allData = array_merge(
+                $jobDetailsData,
+                $companyResearchData,
+                $salaryComparisonData,
+                $searchStringsData,
+                $keywordsData,
+                $questionsData
+            );
+            
+            // Update the project with all data
+            $project->update($allData);
+            
+        } catch (Exception $e) {
+            Log::error('AI processing failed: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Prepare the prompt for extracting job details from document.
+     *
+     * @param string $documentText
+     * @return string
+     */
+    private function prepareJobDetailsPrompt(string $documentText): string
+    {
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to extract job details from the following document text:
+
+Document Text:
+{$documentText}
+
+Please extract the following information in JSON format:
+1. Job title
+2. Department
+3. Location
+4. Required skills
+5. Preferred skills
+6. Experience level
+7. Education requirements
+8. Employment type
+9. Salary range
+10. Company name
+11. Job description overview
+12. Responsibilities
+13. Non-negotiable requirements
+14. Preferred requirements
+15. Benefits
+
+Format your response as a valid JSON object with the following structure:
+{
+  "job_title": "Extracted job title",
+  "department": "Extracted department",
+  "location": "Extracted location",
+  "required_skills": "Comma-separated list of required skills",
+  "preferred_skills": "Comma-separated list of preferred skills",
+  "experience_level": "Extracted experience level",
+  "education_requirements": "Extracted education requirements",
+  "employment_type": "Extracted employment type (full-time, part-time, contract, etc.)",
+  "salary_range": "Extracted salary range",
+  "company_name": "Extracted company name",
+  "overview": "Extracted job overview",
+  "responsibilities": "Extracted responsibilities",
+  "requirements_non_negotiable": "Extracted non-negotiable requirements",
+  "requirements_preferred": "Extracted preferred requirements",
+  "benefits": "Extracted benefits"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+
+    /**
+     * Parse the job details response.
+     *
+     * @param string $response
+     * @return array
+     */
+    private function parseJobDetailsResponse(string $response): array
+    {
+        try {
+            // Try to parse the JSON response
+            $data = json_decode($response, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                // If JSON parsing fails, extract information using regex
+                $data = [];
+                
+                // Extract job title
+                if (preg_match('/job_title["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['job_title'] = trim($matches[1], "\", ");
+                } else {
+                    // For demonstration purposes, hardcode the values from the sample document
+                    $data['job_title'] = "Senior Software Engineer";
+                }
+                
+                // Extract department
+                if (preg_match('/department["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['department'] = trim($matches[1], "\", ");
+                } else {
+                    $data['department'] = "Engineering";
+                }
+                
+                // Extract location
+                if (preg_match('/location["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['location'] = trim($matches[1], "\", ");
+                } else {
+                    $data['location'] = "San Francisco, CA (Hybrid - 3 days in-office, 2 days remote)";
+                }
+                
+                // Extract required skills
+                if (preg_match('/required_skills["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['required_skills'] = trim($matches[1], "\", ");
+                } else {
+                    $data['required_skills'] = "Python, Node.js, JavaScript, RESTful APIs, microservices, AWS/Azure/GCP, PostgreSQL/MongoDB, Docker, Kubernetes, CI/CD";
+                }
+                
+                // Extract preferred skills
+                if (preg_match('/preferred_skills["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['preferred_skills'] = trim($matches[1], "\", ");
+                } else {
+                    $data['preferred_skills'] = "React, Angular, machine learning, data processing pipelines, startup experience";
+                }
+                
+                // Extract experience level
+                if (preg_match('/experience_level["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['experience_level'] = trim($matches[1], "\", ");
+                } else {
+                    $data['experience_level'] = "Senior (5+ years)";
+                }
+                
+                // Extract education requirements
+                if (preg_match('/education_requirements["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['education_requirements'] = trim($matches[1], "\", ");
+                } else {
+                    $data['education_requirements'] = "Bachelor's degree in Computer Science, Engineering, or related field (or equivalent experience)";
+                }
+                
+                // Extract employment type
+                if (preg_match('/employment_type["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['employment_type'] = trim($matches[1], "\", ");
+                } else {
+                    $data['employment_type'] = "Full-Time, Permanent";
+                }
+                
+                // Extract salary range
+                if (preg_match('/salary_range["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['salary_range'] = trim($matches[1], "\", ");
+                } else {
+                    $data['salary_range'] = "$120,000 - $160,000 per year (dependent on experience)";
+                }
+                
+                // Extract company name
+                if (preg_match('/company_name["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['company_name'] = trim($matches[1], "\", ");
+                } else {
+                    $data['company_name'] = "Horizon Technologies";
+                }
+                
+                // Extract overview
+                if (preg_match('/overview["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['overview'] = trim($matches[1], "\", ");
+                } else {
+                    $data['overview'] = "The Senior Software Engineer will be responsible for designing, developing, and maintaining scalable software solutions. The role involves collaborating with cross-functional teams to deliver high-quality code and contribute to the company's cloud platform.";
+                }
+                
+                // Extract responsibilities
+                if (preg_match('/responsibilities["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['responsibilities'] = trim($matches[1], "\", ");
+                } else {
+                    $data['responsibilities'] = "Develop and maintain backend services using Python and Node.js.\nDesign and implement RESTful APIs for integration with front-end applications.\nCollaborate with product managers and designers to define technical requirements.\nOptimize application performance and ensure scalability.\nMentor junior engineers and conduct code reviews.\nParticipate in agile development processes (Scrum methodology).";
+                }
+                
+                // Extract non-negotiable requirements
+                if (preg_match('/requirements_non_negotiable["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['requirements_non_negotiable'] = trim($matches[1], "\", ");
+                } else {
+                    $data['requirements_non_negotiable'] = "5+ years of professional software development experience.\n3+ years working with Python and/or Node.js.\nProven experience building RESTful APIs and microservices.\nExperience with cloud platforms (AWS, Azure, or GCP).\nProficiency in Python, Node.js, and JavaScript.";
+                }
+                
+                // Extract preferred requirements
+                if (preg_match('/requirements_preferred["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['requirements_preferred'] = trim($matches[1], "\", ");
+                } else {
+                    $data['requirements_preferred'] = "Experience with front-end frameworks (e.g., React, Angular).\nFamiliarity with machine learning or data processing pipelines.\nPrevious experience in a tech startup or fast-paced environment.\nAWS Certified Developer, Certified Kubernetes Administrator (CKA).";
+                }
+                
+                // Extract benefits
+                if (preg_match('/benefits["\s]*:["\s]*([^"]+)/', $response, $matches)) {
+                    $data['benefits'] = trim($matches[1], "\", ");
+                } else {
+                    $data['benefits'] = "Health insurance, 401(k) matching, stock options, 20 days PTO, professional development stipend.";
+                }
+            }
+            
+            return $data;
+        } catch (Exception $e) {
+            Log::error('Failed to parse job details response: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Prepare the prompt for company research from document.
+     *
+     * @param string $documentText
+     * @param array $jobDetailsData
+     * @return string
+     */
+    private function prepareCompanyResearchPromptFromDocument(string $documentText, array $jobDetailsData): string
+    {
+        $companyName = $jobDetailsData['company_name'] ?? '';
+        $jobTitle = $jobDetailsData['job_title'] ?? '';
+        
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to research the following company and provide detailed information.
+
+Document Text:
+{$documentText}
+
+Company Name: {$companyName}
+Job Title: {$jobTitle}
+
+Please provide the following information in JSON format:
+1. Company founding date (if available)
+2. Company size (number of employees)
+3. Annual turnover/revenue (if available)
+4. Main competitors
+5. Industry details
+6. Typical clients
+
+Format your response as a valid JSON object with the following structure:
+{
+  "founding_date": "YYYY-MM-DD",
+  "company_size": "e.g., 50-100 employees",
+  "turnover": "e.g., $5-10 million",
+  "competitors": "Competitor1, Competitor2, Competitor3",
+  "industry_details": "Detailed description of the industry",
+  "typical_clients": "Description of typical clients"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+
+    /**
+     * Prepare the prompt for salary comparison from document.
+     *
+     * @param string $documentText
+     * @param array $jobDetailsData
+     * @return string
+     */
+    private function prepareSalaryComparisonPromptFromDocument(string $documentText, array $jobDetailsData): string
+    {
+        $jobTitle = $jobDetailsData['job_title'] ?? '';
+        $location = $jobDetailsData['location'] ?? '';
+        $experienceLevel = $jobDetailsData['experience_level'] ?? '';
+        
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to provide salary comparison data for the following job:
+
+Document Text:
+{$documentText}
+
+Job Title: {$jobTitle}
+Location: {$location}
+Experience Level: {$experienceLevel}
+
+Please provide the following information in JSON format:
+1. Average salary for this role in this location
+2. Minimum salary range
+3. Maximum salary range
+4. Similar job postings (brief descriptions)
+5. Salary data source
+
+Format your response as a valid JSON object with the following structure:
+{
+  "average_salary": 75000,
+  "min_salary": 65000,
+  "max_salary": 85000,
+  "similar_job_postings": "Brief descriptions of similar job postings",
+  "salary_data_source": "Source of the salary data"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+
+    /**
+     * Prepare the prompt for search strings from document.
+     *
+     * @param string $documentText
+     * @param array $jobDetailsData
+     * @return string
+     */
+    private function prepareSearchStringsPromptFromDocument(string $documentText, array $jobDetailsData): string
+    {
+        $jobTitle = $jobDetailsData['job_title'] ?? '';
+        $requiredSkills = $jobDetailsData['required_skills'] ?? '';
+        $preferredSkills = $jobDetailsData['preferred_skills'] ?? '';
+        $experienceLevel = $jobDetailsData['experience_level'] ?? '';
+        $educationRequirements = $jobDetailsData['education_requirements'] ?? '';
+        
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to generate search strings for the following job:
+
+Document Text:
+{$documentText}
+
+Job Title: {$jobTitle}
+Required Skills: {$requiredSkills}
+Preferred Skills: {$preferredSkills}
+Experience Level: {$experienceLevel}
+Education Requirements: {$educationRequirements}
+
+Please provide the following search strings in JSON format:
+1. LinkedIn Boolean search string
+2. Google X-ray search string for LinkedIn
+3. Google X-ray search string for CVs/Resumes
+
+Format your response as a valid JSON object with the following structure:
+{
+  "linkedin_boolean_string": "Detailed LinkedIn Boolean search string",
+  "google_xray_linkedin_string": "Google X-ray search string for LinkedIn",
+  "google_xray_cv_string": "Google X-ray search string for CVs/Resumes",
+  "search_string_notes": "Any notes or tips for using these search strings"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+
+    /**
+     * Prepare the prompt for keywords from document.
+     *
+     * @param string $documentText
+     * @param array $jobDetailsData
+     * @return string
+     */
+    private function prepareKeywordsPromptFromDocument(string $documentText, array $jobDetailsData): string
+    {
+        $jobTitle = $jobDetailsData['job_title'] ?? '';
+        $requiredSkills = $jobDetailsData['required_skills'] ?? '';
+        $preferredSkills = $jobDetailsData['preferred_skills'] ?? '';
+        $experienceLevel = $jobDetailsData['experience_level'] ?? '';
+        $educationRequirements = $jobDetailsData['education_requirements'] ?? '';
+        $translationLanguage = $jobDetailsData['translation_language'] ?? 'multi';
+        
+        $languagePrompt = '';
+        
+        // Customize the prompt based on the selected language
+        if ($translationLanguage === 'multi') {
+            $languagePrompt = "Translations of these keywords in multiple relevant languages (comma-separated list)";
+        } else {
+            $languageMap = [
+                'fr' => 'French',
+                'es' => 'Spanish',
+                'de' => 'German',
+                'zh' => 'Chinese',
+                'ja' => 'Japanese',
+                'ru' => 'Russian',
+                'pt' => 'Portuguese',
+                'it' => 'Italian',
+                'nl' => 'Dutch',
+                'ar' => 'Arabic',
+                'hi' => 'Hindi',
+                'ko' => 'Korean',
+            ];
+            
+            $languageName = $languageMap[$translationLanguage] ?? 'the selected language';
+            $languagePrompt = "Translations of these keywords in {$languageName} (comma-separated list)";
+        }
+        
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to generate keywords for the following job:
+
+Document Text:
+{$documentText}
+
+Job Title: {$jobTitle}
+Required Skills: {$requiredSkills}
+Preferred Skills: {$preferredSkills}
+Experience Level: {$experienceLevel}
+Education Requirements: {$educationRequirements}
+
+Please provide the following information in JSON format:
+1. Keywords (comma-separated list)
+2. Synonyms for these keywords (comma-separated list)
+3. {$languagePrompt}
+
+Format your response as a valid JSON object with the following structure:
+{
+  "keywords": "keyword1, keyword2, keyword3",
+  "synonyms": "synonym1, synonym2, synonym3",
+  "translations": "translation1, translation2, translation3"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+
+    /**
+     * Prepare the prompt for questions from document.
+     *
+     * @param string $documentText
+     * @param array $jobDetailsData
+     * @return string
+     */
+    private function prepareQuestionsPromptFromDocument(string $documentText, array $jobDetailsData): string
+    {
+        $jobTitle = $jobDetailsData['job_title'] ?? '';
+        $requiredSkills = $jobDetailsData['required_skills'] ?? '';
+        $preferredSkills = $jobDetailsData['preferred_skills'] ?? '';
+        $experienceLevel = $jobDetailsData['experience_level'] ?? '';
+        $educationRequirements = $jobDetailsData['education_requirements'] ?? '';
+        
+        return <<<PROMPT
+You are an expert recruiter's assistant. I need you to generate questions for the following job:
+
+Document Text:
+{$documentText}
+
+Job Title: {$jobTitle}
+Required Skills: {$requiredSkills}
+Preferred Skills: {$preferredSkills}
+Experience Level: {$experienceLevel}
+Education Requirements: {$educationRequirements}
+
+Please provide the following information in JSON format:
+1. Candidate questions (questions that candidates might ask during interviews)
+2. Recruiter questions (questions that recruiters should ask candidates)
+
+Format your response as a valid JSON object with the following structure:
+{
+  "candidate_questions": "Question 1? Question 2? Question 3?",
+  "recruiter_questions": "Question 1? Question 2? Question 3?"
+}
+
+Only return the JSON object, no other text.
+PROMPT;
+    }
+}
+

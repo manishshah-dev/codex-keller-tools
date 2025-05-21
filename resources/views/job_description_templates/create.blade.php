@@ -1,0 +1,33 @@
+<x-app-layout>
+    <x-slot name="header">
+        <div class="flex justify-between items-center">
+            <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+                {{ __('Create Job Description Template') }}
+            </h2>
+            <div>
+                <a href="{{ route('job-description-templates.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+                    Back to Templates
+                </a>
+            </div>
+        </div>
+    </x-slot>
+
+    <div class="py-12">
+        <x-container>
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6 text-gray-900">
+                    <form action="{{ route('job-description-templates.store') }}" method="POST">
+                        @csrf
+                        @include('job_description_templates._form', ['template' => new App\Models\JobDescriptionTemplate()])
+                        
+                        <div class="flex items-center justify-end mt-6">
+                            <x-primary-button>
+                                {{ __('Create Template') }}
+                            </x-primary-button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </x-container>
+    </div>
+</x-app-layout>

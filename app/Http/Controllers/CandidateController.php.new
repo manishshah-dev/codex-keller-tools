@@ -1,0 +1,764 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Candidate;
+use App\Models\Project;
+use App\Models\ProjectRequirement;
+use App\Models\CandidateChatMessage;
+use App\Models\AISetting;
+use App\Services\AIService;
+use App\Models\AIPrompt;
+use App\Jobs\AnalyzeAllCandidatesJob; // Import the job class
+use Illuminate\Http\Request;
+// Removed duplicate Project import
+// Removed duplicate Candidate import
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+// Removed duplicate Auth import
+// Removed duplicate imports below
+use Smalot\PdfParser\Parser;
+use PhpOffice\PhpWord\IOFactory;
+use App\Services\ModelRegistryService; // Import the service
+use Symfony\Component\HttpFoundation\StreamedResponse; // For file response
+
+class CandidateController extends Controller
+{
+    /**
+     * Display a listing of the candidates.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function index(): View
+    {
+        $candidates = Candidate::with('project')
+            ->orderBy('created_at', 'desc')
+            ->paginate(10);
+        
+        return view('candidates.index', compact('candidates'));
+    }
+    
+    /**
+     * Display a listing of the candidates for a specific project.
+     *
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\View\View
+     */
+    public function projectIndex(Project $project, ModelRegistryService $modelRegistryService): View // Inject service
+    {
+        $this->authorize('view', $project);
+        
+        $candidates = $project->candidates()
+            ->orderByScore() // Assumes scopeOrderByScore exists
+            ->paginate(10);
+        
+        $requirements = $project->activeRequirements()->get();
+
+        // Fetch AI Settings suitable for CV analysis
+        $aiSettings = AISetting::active()
+            ->whereJsonContains('capabilities', 'cv_analyzer') // Check capability
+            ->get();
+            
+        // Fetch available prompts for CV analysis
+        $prompts = AIPrompt::where('feature', 'cv_analyzer')->orderBy('name')->get();
+
+        // Fetch the dynamic model map
+        $providerModels = $modelRegistryService->getModels();
+
+        return view('candidates.project_index', compact(
+            'project',
+            'candidates',
+            'requirements',
+            'aiSettings', // Pass settings
+            'prompts',    // Pass prompts
+            'providerModels' // Pass model map
+        ));
+    }
+    
+    /**
+     * Show the form for creating a new candidate.
+     *
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\View\View
+     */
+    public function create(Project $project): View
+    {
+        $this->authorize('update', $project);
+        
+        return view('candidates.create', compact('project'));
+    }
+    
+    /**
+     * Store a newly created candidate in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    // Updated to handle multiple file uploads from the create view
+    public function store(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+
+        $validated = $request->validate([
+            'cv_files' => 'required|array|min:1', // Expecting an array of files
+            'cv_files.*' => 'required|file|mimes:pdf,doc,docx|max:10240', // Max 10MB per file
+        ]);
+
+        $uploadedCount = 0;
+        $failedFiles = [];
+        $lastCandidateId = null; // To redirect to the last processed candidate
+
+        foreach ($validated['cv_files'] as $file) {
+            try {
+                // Generate a unique name and store the file
+                $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+                $extension = $file->getClientOriginalExtension();
+                // Use project ID and user ID for subdirectories, store in 'private' disk
+                $path = $file->storeAs(
+                    'resumes/project_' . $project->id . '/user_' . Auth::id(),
+                    Str::slug($originalName) . '_' . uniqid() . '.' . $extension,
+                    'private' // Use the 'private' disk
+                );
+
+                // Extract text from resume
+                $resumeText = $this->extractTextFromResume($file);
+
+                // Extract details using the new method
+                $extractedDetails = $this->extractDetailsFromText($resumeText);
+
+                // Attempt to parse name (basic split) - Keep this basic or improve later
+                $nameParts = explode(' ', $originalName, 2);
+                $firstName = $nameParts[0];
+                $lastName = $nameParts[1] ?? '(CV)'; // Slightly better placeholder
+
+                // Create a candidate record with extracted details
+                $candidate = Candidate::create([
+                    'project_id' => $project->id,
+                    'user_id' => Auth::id(),
+                    'first_name' => $firstName, // Use filename part as placeholder
+                    'last_name' => $lastName,   // Use filename part or default
+                    'email' => $extractedDetails['email'], // Use extracted email
+                    'phone' => $extractedDetails['phone'], // Use extracted phone
+                    'location' => $extractedDetails['location'], // Use extracted location
+                    'resume_path' => $path,
+                    'resume_text' => $resumeText,
+                    'status' => 'new',
+                    'source' => 'upload', // Keep source as 'upload'
+                ]);
+                $uploadedCount++;
+                $lastCandidateId = $candidate->id;
+
+                // Trigger analysis (assuming analyzeCandidate handles potential errors)
+                 if ($candidate) {
+                     Log::info("Triggering analysis for uploaded candidate ID: {$candidate->id}");
+                     $this->analyzeCandidate($candidate);
+                 }
+
+            } catch (\Exception $e) {
+                Log::error("Failed to upload/process CV: " . $file->getClientOriginalName() . " - Error: " . $e->getMessage());
+                $failedFiles[] = $file->getClientOriginalName();
+            }
+        }
+
+        $message = "Successfully processed {$uploadedCount} CV(s).";
+        $redirectRoute = 'projects.candidates.index'; // Default redirect
+        $routeParams = [$project];
+
+        if ($uploadedCount === 1 && $lastCandidateId) {
+             // If only one succeeded, redirect to its show page
+             $redirectRoute = 'candidates.show'; // Use shallow route
+             $routeParams = [$lastCandidateId]; // Pass only candidate ID
+        } elseif ($uploadedCount > 1) {
+             // If multiple succeeded, redirect to project candidate list
+             $redirectRoute = 'projects.candidates.index';
+             $routeParams = [$project];
+        }
+
+
+        if (!empty($failedFiles)) {
+            $message .= " Failed to upload/process: " . implode(', ', $failedFiles);
+            return redirect()->route($redirectRoute, $routeParams)
+                         ->with('warning', $message);
+        }
+
+        return redirect()->route($redirectRoute, $routeParams)
+                     ->with('success', $message);
+    }
+    
+    /**
+     * Display the specified candidate.
+     *
+     * @param  \App\Models\Candidate  $candidate
+     * @return \Illuminate\View\View
+     */
+    // Removed Project $project due to shallow routing
+    public function show(Candidate $candidate): View
+    {
+        $project = $candidate->project; // Get project from candidate
+        $this->authorize('view', $project);
+        
+        $requirements = $project->activeRequirements()->get();
+        $chatMessages = $candidate->chatMessages()->orderBy('created_at')->get();
+        
+        // Fix analysis_details format if it exists
+        if ($candidate->analysis_details) {
+            // If it's a string that starts with a quote and contains escaped JSON
+            if (is_string($candidate->analysis_details) &&
+                (strpos($candidate->analysis_details, '"{"') === 0 ||
+                 strpos($candidate->analysis_details, '"{\"') === 0)) {
+
+                // Remove the extra quotes at the beginning and end
+                $cleanString = trim($candidate->analysis_details, '"');
+                // Unescape the JSON string
+                $unescapedString = stripcslashes($cleanString);
+                // Decode the unescaped JSON
+                $decoded = json_decode($unescapedString, true);
+                
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    // Re-encode with proper formatting
+                    $candidate->analysis_details = json_encode($decoded,
+                        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+                }
+            }
+            // If it's a regular string that might be JSON
+            else if (is_string($candidate->analysis_details)) {
+                // Try to decode the string
+                $decoded = json_decode($candidate->analysis_details, true);
+                Log::info('Decoded analysis_details', ['decoded' => $decoded]);
+                
+                // If it's valid JSON, re-encode it properly
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $candidate->analysis_details = json_encode($decoded,
+                        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+                }
+            }
+            // If it's already an array, encode it to a clean JSON string
+            else if (is_array($candidate->analysis_details)) {
+                $candidate->analysis_details = json_encode($candidate->analysis_details,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            }
+        }
+        
+        return view('candidates.show', compact('project', 'candidate', 'requirements', 'chatMessages'));
+    }
+    
+    /**
+     * Show the form for editing the specified candidate.
+     *
+     * @param  \App\Models\Candidate  $candidate
+     * @return \Illuminate\View\View
+     */
+     // Removed Project $project due to shallow routing
+    public function edit(Candidate $candidate): View
+    {
+        $project = $candidate->project; // Get project from candidate
+        $this->authorize('update', $project);
+        
+        return view('candidates.edit', compact('project', 'candidate'));
+    }
+    
+    /**
+     * Update the specified candidate in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Candidate  $candidate
+     * @return \Illuminate\Http\RedirectResponse
+     */
+     // Removed Project $project due to shallow routing
+    public function update(Request $request, Candidate $candidate): RedirectResponse
+    {
+        $project = $candidate->project; // Get project from candidate
+        $this->authorize('update', $project);
+        
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
+            'phone' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'current_company' => 'nullable|string|max:255',
+            'current_position' => 'nullable|string|max:255',
+            'linkedin_url' => 'nullable|url|max:255',
+            'resume' => 'nullable|file|mimes:pdf,doc,docx|max:10240',
+            'notes' => 'nullable|string',
+            'status' => 'nullable|string|in:new,contacted,interviewing,offered,hired,rejected,withdrawn',
+        ]);
+        
+        $updateData = [
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'email' => $validated['email'] ?? $candidate->email, // Keep old if not provided
+            'phone' => $validated['phone'] ?? $candidate->phone, // Keep old if not provided
+            'location' => $validated['location'] ?? $candidate->location, // Keep old if not provided
+            'current_company' => $validated['current_company'] ?? null,
+            'current_position' => $validated['current_position'] ?? null,
+            'linkedin_url' => $validated['linkedin_url'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+            'status' => $validated['status'] ?? $candidate->status,
+        ];
+
+        // Handle resume upload
+        if ($request->hasFile('resume')) {
+            // Delete old resume if exists
+            if ($candidate->resume_path) {
+                // Use private disk for deletion
+                Storage::disk('private')->delete($candidate->resume_path);
+            }
+            
+            $file = $request->file('resume');
+            $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+            $extension = $file->getClientOriginalExtension();
+            // Use private disk for storage
+            $resumePath = $file->storeAs(
+                 'resumes/project_' . $candidate->project_id . '/user_' . Auth::id(),
+                 Str::slug($validated['first_name'] . '-' . $validated['last_name']) . '_' . uniqid() . '.' . $extension,
+                 'private'
+            );
+            
+            // Extract text from resume
+            $resumeText = $this->extractTextFromResume($file);
+            
+            // Extract details from the new resume text
+            $extractedDetails = $this->extractDetailsFromText($resumeText);
+
+            $updateData['resume_path'] = $resumePath;
+            $updateData['resume_text'] = $resumeText;
+            // Overwrite email/phone/location with newly extracted data if found
+            // Only update if the extracted value is not null, otherwise keep the value from the form/existing data
+            if (!is_null($extractedDetails['email'])) {
+                $updateData['email'] = $extractedDetails['email'];
+            }
+            if (!is_null($extractedDetails['phone'])) {
+                $updateData['phone'] = $extractedDetails['phone'];
+            }
+             if (!is_null($extractedDetails['location'])) {
+                $updateData['location'] = $extractedDetails['location'];
+            }
+            
+            // Re-analyze the candidate
+            $this->analyzeCandidate($candidate); // Analyze after potential data update
+        }
+        
+        // Update candidate
+        $candidate->update($updateData);
+        
+        // Use the shallow route name 'candidates.show'
+        return redirect()->route('candidates.show', $candidate)
+            ->with('success', 'Candidate updated successfully.');
+    }
+    
+    /**
+     * Remove the specified candidate from storage.
+     *
+     * @param  \App\Models\Candidate  $candidate
+     * @return \Illuminate\Http\RedirectResponse
+     */
+     // Removed Project $project due to shallow routing
+    public function destroy(Candidate $candidate): RedirectResponse
+    {
+        $project = $candidate->project; // Get project from candidate
+        $this->authorize('update', $project);
+        
+        // Delete resume file from private disk
+        if ($candidate->resume_path) {
+            Storage::disk('private')->delete($candidate->resume_path);
+        }
+        
+        $candidate->delete();
+        
+        return redirect()->route('projects.candidates.index', $project)
+            ->with('success', 'Candidate deleted successfully.');
+    }
+    
+    /**
+     * Show the CV Analyzer chat interface.
+     *
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\View\View
+     */
+    public function analyzer(Project $project): View
+    {
+        $this->authorize('view', $project);
+        
+        $candidates = $project->candidates()
+            ->orderByScore()
+            ->get();
+        
+        $requirements = $project->activeRequirements()->get();
+        
+        return view('candidates.analyzer', compact('project', 'candidates', 'requirements'));
+    }
+    
+    /**
+     * Process a chat message in the CV Analyzer.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function chat(Request $request, Project $project)
+    {
+        $this->authorize('update', $project);
+        
+        $validated = $request->validate([
+            'message' => 'required|string',
+            'candidate_id' => 'nullable|exists:candidates,id',
+            'ai_provider' => 'required|string',
+            'ai_model' => 'required|string',
+        ]);
+        
+        try {
+            // Save user message
+            $userMessage = new CandidateChatMessage([
+                'project_id' => $project->id,
+                'user_id' => Auth::id(),
+                'message' => $validated['message'],
+                'is_user' => true,
+            ]);
+            
+            if (!empty($validated['candidate_id'])) {
+                $candidate = Candidate::findOrFail($validated['candidate_id']);
+                $userMessage->candidate_id = $candidate->id;
+            }
+            
+            $userMessage->save();
+            
+            // Process the message to identify requirement changes
+            $requirementsAdded = [];
+            $requirementsRemoved = [];
+            $requirementsUpdated = false; // Flag to track if re-analysis is needed
+
+            // Simple keyword-based requirement extraction (basic implementation)
+            $lowerMessage = strtolower($validated['message']);
+
+            // Example: "add required skill PHP with weight 0.8"
+            if (preg_match('/add(?:\s+required)?\s+(skill|experience|education)\s+(.*?)(?:\s+with\s+weight\s+([\d.]+))?$/i', $validated['message'], $matches)) {
+                $newReq = [
+                    'type' => strtolower($matches[1]),
+                    'name' => trim($matches[2]),
+                    'description' => 'Added via chat',
+                    'weight' => isset($matches[3]) ? (float)$matches[3] : 1.0,
+                    'is_required' => str_contains($lowerMessage, 'required'),
+                ];
+                $requirementsAdded[] = $newReq;
+                $requirementsUpdated = true;
+            }
+
+            // Example: "remove requirement PHP" or "remove skill PHP"
+            if (preg_match('/remove(?:\s+requirement|\s+skill|\s+experience|\s+education)?\s+(.*)$/i', $validated['message'], $matches)) {
+                $reqNameToRemove = trim($matches[1]);
+                $existingReq = $project->activeRequirements()->where('name', 'ILIKE', $reqNameToRemove)->first();
+                if ($existingReq) {
+                    $requirementsRemoved[] = $existingReq->id;
+                    $requirementsUpdated = true;
+                }
+            }
+
+            // TODO: Implement more sophisticated NLP for requirement extraction if needed
+            // Call AI service
+            $aiService = new AIService();
+            $prompt = $this->buildChatPrompt($project, $validated['message'], $validated['candidate_id'] ?? null);
+            
+            $aiResponse = $aiService->generateContent(
+                $validated['ai_provider'],
+                $validated['ai_model'],
+                $prompt,
+                [],
+                Auth::id(),
+                'cv_analyzer'
+            );
+            
+            // Save AI response
+            $aiMessage = new CandidateChatMessage([
+                'project_id' => $project->id,
+                'user_id' => Auth::id(),
+                'message' => $aiResponse['content'],
+                'is_user' => false,
+                'requirements_added' => $requirementsAdded,
+                'requirements_removed' => $requirementsRemoved,
+                'ai_provider' => $validated['ai_provider'],
+                'ai_model' => $validated['ai_model'],
+                'tokens_used' => $aiResponse['tokens_used'],
+                'cost' => $aiResponse['cost'],
+            ]);
+            
+            if (!empty($validated['candidate_id'])) {
+                $aiMessage->candidate_id = $validated['candidate_id'];
+            }
+            
+            $aiMessage->save();
+            
+            // Apply requirement changes
+            if (!empty($requirementsAdded)) {
+                foreach ($requirementsAdded as $requirement) {
+                    ProjectRequirement::create([
+                        'project_id' => $project->id,
+                        'user_id' => Auth::id(),
+                        'type' => $requirement['type'],
+                        'name' => $requirement['name'],
+                        'description' => $requirement['description'] ?? null,
+                        'weight' => $requirement['weight'] ?? 1.0,
+                        'is_required' => $requirement['is_required'] ?? false,
+                        'source' => 'chat',
+                        'created_by_chat' => true,
+                    ]);
+                }
+            }
+            
+            if (!empty($requirementsRemoved)) {
+                foreach ($requirementsRemoved as $requirementId) {
+                    $requirement = ProjectRequirement::find($requirementId);
+                    if ($requirement && $requirement->project_id === $project->id) {
+                        $requirement->is_active = false;
+                        $requirement->save();
+                    }
+                }
+            }
+            
+            // If requirements were updated, re-analyze all candidates
+            if ($requirementsUpdated) {
+                Log::info("Requirements updated via chat for project {$project->id}. Re-analyzing candidates.");
+                $this->analyzeAllCandidates($project);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'user_message' => [
+                    'id' => $userMessage->id,
+                    'message' => $userMessage->message,
+                    'is_user' => true,
+                    'created_at' => $userMessage->created_at->format('Y-m-d H:i:s'),
+                ],
+                'ai_message' => [
+                    'id' => $aiMessage->id,
+                    'message' => $aiMessage->message,
+                    'is_user' => false,
+                    'created_at' => $aiMessage->created_at->format('Y-m-d H:i:s'),
+                    'requirements_added' => $requirementsAdded,
+                    'requirements_removed' => $requirementsRemoved,
+                ],
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error("Error in chat: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'An error occurred while processing your message: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+    
+    /**
+     * Import candidates from Workable.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function importFromWorkable(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+        
+        $validated = $request->validate([
+            'workable_url' => 'required|url',
+        ]);
+        
+        // TODO: Implement Workable API integration
+        
+        return redirect()->route('projects.candidates.index', $project)
+            ->with('info', 'Workable integration is not yet implemented.');
+    }
+    
+    /**
+     * Batch upload resumes.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Project  $project
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function batchUpload(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+        
+        $validated = $request->validate([
+            'resumes' => 'required|array|min:1',
+            'resumes.*' => 'required|file|mimes:pdf,doc,docx|max:10240',
+        ]);
+        
+        $uploadedCount = 0;
+        $failedFiles = [];
+        
+        foreach ($validated['resumes'] as $file) {
+            try {
+                $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+                $extension = $file->getClientOriginalExtension();
+                
+                $path = $file->storeAs(
+                    'resumes/project_' . $project->id . '/user_' . Auth::id(),
+                    Str::slug($originalName) . '_' . uniqid() . '.' . $extension,
+                    'private'
+                );
+                
+                $resumeText = $this->extractTextFromResume($file);
+                $extractedDetails = $this->extractDetailsFromText($resumeText);
+                
+                $nameParts = explode(' ', $originalName, 2);
+                $firstName = $nameParts[0];
+                $lastName = $nameParts[1] ?? '(CV)';
+                
+                $candidate = Candidate::create([
+                    'project_id' => $project->id,
+                    'user_id' => Auth::id(),
+                    'first_name' => $firstName,
+                    'last_name' => $lastName,
+                    'email' => $extractedDetails['email'],
+                    'phone' => $extractedDetails['phone'],
+                    'location' => $extractedDetails['location'],
+                    'current_company' => $extractedDetails['current_company'],
+                    'current_position' => $extractedDetails['current_position'],
+                    'resume_path' => $path,
+                    'resume_text' => $resumeText,
+                    'status' => 'new',
+                    'source' => 'batch_upload',
+                ]);
+                
+                $uploadedCount++;
+                
+                if ($candidate) {
+                    $this->analyzeCandidate($candidate);
+                }
+                
+            } catch (\Exception $e) {
+                Log::error("Failed to upload/process resume: " . $file->getClientOriginalName() . " - Error: " . $e->getMessage());
+                $failedFiles[] = $file->getClientOriginalName();
+            }
+        }
+        
+        $message = "Successfully processed {$uploadedCount} resume(s).";
+        
+        if (!empty($failedFiles)) {
+            $message .= " Failed to upload/process: " . implode(', ', $failedFiles);
+            return redirect()->route('projects.candidates.index', $project)
+                ->with('warning', $message);
+        }
+        
+        return redirect()->route('projects.candidates.index', $project)
+            ->with('success', $message);
+    }
+    
+    /**
+     * Extract text from a resume file.
+     *
+     * @param  \Illuminate\Http\UploadedFile  $file
+     * @return string|null
+     */
+    private function extractTextFromResume($file): ?string
+    {
+        $extension = strtolower($file->getClientOriginalExtension());
+        $text = null;
+        
+        try {
+            if ($extension === 'pdf') {
+                $parser = new Parser();
+                $pdf = $parser->parseFile($file->getPathname());
+                $text = $pdf->getText();
+            } elseif ($extension === 'doc' || $extension === 'docx') {
+                $phpWord = IOFactory::load($file->getPathname());
+                $text = '';
+                
+                foreach ($phpWord->getSections() as $section) {
+                    foreach ($section->getElements() as $element) {
+                        if (method_exists($element, 'getText')) {
+                            $text .= $element->getText() . "\n";
+                        } elseif (method_exists($element, 'getElements')) {
+                            foreach ($element->getElements() as $childElement) {
+                                if (method_exists($childElement, 'getText')) {
+                                    $text .= $childElement->getText() . "\n";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Clean up the text (remove excessive whitespace)
+            $text = preg_replace('/\s+/', ' ', $text);
+            $text = trim($text);
+            
+            return $text;
+        } catch (\Exception $e) {
+            Log::error("Failed to extract text from resume: " . $e->getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Analyze a candidate's resume against project requirements.
+     *
+     * @param  \App\Models\Candidate  $candidate
+     * @param  \App\Models\AISetting|null  $aiSetting
+     * @param  string|null  $model
+     * @param  int|null  $promptId
+     * @return void
+     */
+    private function analyzeCandidate(Candidate $candidate, ?AISetting $aiSetting = null, ?string $model = null, ?int $promptId = null): void
+    {
+        // Find a suitable AI setting if not provided
+        if (!$aiSetting) {
+            // First try to find the default setting for CV analysis
+            $aiSetting = AISetting::where('is_default', true)
+                ->whereJsonContains('capabilities', 'cv_analyzer')
+                ->active()
+                ->first();
+            
+            // If no default, use any active setting with CV analyzer capability
+            if (!$aiSetting) {
+                $aiSetting = AISetting::whereJsonContains('capabilities', 'cv_analyzer')
+                    ->active()
+                    ->first();
+            }
+        }
+
+        // Find a suitable model if not provided
+        if (!$model && $aiSetting) {
+             // Optional: Add validation to ensure the found prompt is compatible
+             if ($aiPrompt && (($aiPrompt->provider && $aiPrompt->provider !== $aiSetting->provider) || ($aiPrompt->model && $aiPrompt->model !== $model))) {
+                  Log::warning("Selected prompt ID {$promptId} is not compatible with setting/model for candidate ID: {$candidate->id}. Falling back to default/generic.");
+                  $aiPrompt = null; // Fallback
+             }
+        }
+
+
+        if (empty($candidate->resume_text)) {
+            Log::warning("Cannot analyze candidate ID: {$candidate->id} - Resume text is empty.");
+            $candidate->status = 'analysis_failed';
+            $candidate->save();
+            return;
+        }
+
+        $project = $candidate->project;
+        if (!$project) {
+             Log::error("Cannot analyze candidate ID: {$candidate->id} - Project not found.");
+             $candidate->status = 'analysis_failed';
+             $candidate->save();
+             return;
+        }
+
+        $requirementsText = $project->requirements->map(function ($req) {
+            return "- " . $req->name . ($req->is_required ? ' (Required)' : '') . ' [Weight: ' . $req->weight . ']';
+        })->implode("\n");
+
+        if ($project->requirements->isEmpty()) {
+            Log::warning("Analyzing candidate ID: {$candidate->id} without project requirements.");
+        }
+
+        $candidate->status = 'analyzing';
+        $candidate->save(); // Update status before calling AI
+
+        try {
+            $aiService = new AIService();
