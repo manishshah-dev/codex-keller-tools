@@ -154,12 +154,10 @@ class CandidateController extends Controller
 
                 // Trigger analysis (assuming analyzeCandidate handles potential errors)
                  if ($candidate) {
-                     Log::info("Triggering analysis for uploaded candidate ID: {$candidate->id}");
                      $this->analyzeCandidate($candidate);
                  }
 
             } catch (\Exception $e) {
-                Log::error("Failed to upload/process CV: " . $file->getClientOriginalName() . " - Error: " . $e->getMessage());
                 $failedFiles[] = $file->getClientOriginalName();
             }
         }
@@ -567,7 +565,6 @@ class CandidateController extends Controller
             
             // Re-analyze candidates if requirements changed
             if ($requirementsUpdated) {
-                 Log::info("Requirements updated via chat for project {$project->id}. Re-analyzing candidates.");
                  $this->analyzeAllCandidates($project);
                  // Fetch updated candidates list for response (optional, depends on UI needs)
             }
@@ -590,7 +587,6 @@ class CandidateController extends Controller
                 'requirements_removed' => $requirementsRemoved,
             ]);
         } catch (\Exception $e) {
-            Log::error('CV Analyzer chat error: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
@@ -681,7 +677,6 @@ class CandidateController extends Controller
                 // $this->analyzeCandidate($candidate);
 
             } catch (\Exception $e) {
-                Log::error("Failed to batch upload/process CV: " . $file->getClientOriginalName() . " - Error: " . $e->getMessage());
                 $failedFiles[] = $file->getClientOriginalName();
             }
         }
@@ -747,18 +742,15 @@ class CandidateController extends Controller
                          unset($word);
                          return $text;
                      } catch (\Exception $comE) {
-                          Log::warning("COM object failed for .doc file: {$filePath}. Error: " . $comE->getMessage() . ". Falling back to basic read.");
                           // Fallback to basic read if COM fails
                           return file_get_contents($filePath);
                      }
                  } else {
                       // Basic fallback for non-Windows (likely won't extract clean text)
-                      Log::warning("Basic file_get_contents used for .doc file on non-Windows: {$filePath}. Formatting will be lost.");
                       return file_get_contents($filePath);
                  }
             }
         } catch (\Exception $e) {
-            Log::error("Error extracting text from resume: {$filePath} - " . $e->getMessage());
             return null;
         }
 
@@ -789,7 +781,6 @@ class CandidateController extends Controller
         }
 
         if (!$aiSetting) {
-            Log::warning("No suitable AI setting found for CV analysis for candidate ID: {$candidate->id}");
             $candidate->status = 'analysis_failed';
             $candidate->save();
             return;
@@ -799,14 +790,12 @@ class CandidateController extends Controller
         if (!$model) {
              $enabledModels = $aiSetting->models ?? [];
              if (empty($enabledModels)) {
-                  Log::warning("No models enabled in the selected AI setting (ID: {$aiSetting->id}) for candidate ID: {$candidate->id}");
                   $candidate->status = 'analysis_failed';
                   $candidate->save();
                   return;
              }
              $model = $enabledModels[0]; // Use the first available model
         } elseif (!in_array($model, $aiSetting->models ?? [])) {
-             Log::warning("Provided model '{$model}' is not enabled in the selected AI setting (ID: {$aiSetting->id}) for candidate ID: {$candidate->id}");
              $candidate->status = 'analysis_failed';
              $candidate->save();
              return;
@@ -823,14 +812,12 @@ class CandidateController extends Controller
              $aiPrompt = AIPrompt::find($promptId);
              // Optional: Add validation to ensure the found prompt is compatible
              if ($aiPrompt && (($aiPrompt->provider && $aiPrompt->provider !== $aiSetting->provider) || ($aiPrompt->model && $aiPrompt->model !== $model))) {
-                  Log::warning("Selected prompt ID {$promptId} is not compatible with setting/model for candidate ID: {$candidate->id}. Falling back to default/generic.");
                   $aiPrompt = null; // Fallback
              }
         }
 
 
         if (empty($candidate->resume_text)) {
-            Log::warning("Cannot analyze candidate ID: {$candidate->id} - Resume text is empty.");
             $candidate->status = 'analysis_failed';
             $candidate->save();
             return;
@@ -838,7 +825,6 @@ class CandidateController extends Controller
 
         $project = $candidate->project;
         if (!$project) {
-             Log::error("Cannot analyze candidate ID: {$candidate->id} - Project not found.");
              $candidate->status = 'analysis_failed';
              $candidate->save();
              return;
@@ -847,10 +833,6 @@ class CandidateController extends Controller
         $requirementsText = $project->requirements->map(function ($req) {
             return "- " . $req->name . ($req->is_required ? ' (Required)' : '') . ' [Weight: ' . $req->weight . ']';
         })->implode("\n");
-
-        if ($project->requirements->isEmpty()) {
-            Log::warning("Analyzing candidate ID: {$candidate->id} without project requirements.");
-        }
 
         $candidate->status = 'analyzing';
         $candidate->save(); // Update status before calling AI
@@ -867,7 +849,6 @@ class CandidateController extends Controller
             );
 
             if ($analysisResult['error']) {
-                Log::error("AI analysis failed for Candidate ID {$candidate->id}: " . $analysisResult['error']);
                 $candidate->status = 'analysis_failed';
             } else {
                 $candidate->match_score = $analysisResult['match_score'];
@@ -899,11 +880,9 @@ class CandidateController extends Controller
                     $candidate->analysis_details = $analysisDetails;
                 }
                 
-                Log::info("Successfully analyzed Candidate ID {$candidate->id}. Score: {$candidate->match_score}");
             }
 
         } catch (\Exception $e) {
-            Log::error("Exception during AI analysis for Candidate ID {$candidate->id}: " . $e->getMessage());
             $candidate->status = 'analysis_failed';
         } finally {
              $candidate->last_analyzed_at = now();
@@ -920,7 +899,6 @@ class CandidateController extends Controller
      */
     private function analyzeAllCandidates(Project $project): void
     {
-         Log::info("analyzeAllCandidates triggered synchronously for Project ID: {$project->id}");
          // Fetch default/first setting for analysis if not specified
          $aiSetting = AISetting::where('is_default', true)
                                 ->active()
@@ -929,12 +907,10 @@ class CandidateController extends Controller
                                 ->first();
 
          if (!$aiSetting) {
-              Log::error("Cannot run analyzeAllCandidates: No suitable AI setting found for CV analysis.");
               return;
          }
          $model = $aiSetting->models[0] ?? null; // Use first available model
          if (!$model) {
-              Log::error("Cannot run analyzeAllCandidates: No models configured for setting ID {$aiSetting->id}.");
               return;
          }
          // Use default prompt or null
@@ -944,14 +920,10 @@ class CandidateController extends Controller
          foreach ($project->candidates as $candidate) {
              try {
                  $this->analyzeCandidate($candidate, $aiSetting, $model, $defaultPrompt?->id);
-                 // Optional: Add delay if needed
-                 // sleep(1);
              } catch (\Exception $e) {
-                 Log::error("Error analyzing candidate {$candidate->id} during analyzeAllCandidates: " . $e->getMessage());
                  // Continue to next candidate
              }
          }
-         Log::info("Finished synchronous analyzeAllCandidates for Project ID: {$project->id}");
     }
 
     /**
@@ -1095,8 +1067,6 @@ class CandidateController extends Controller
                          ->with('info', 'No candidates with resume text found to analyze.');
         }
 
-        Log::info("Dispatching AnalyzeAllCandidatesJob for Project ID: {$project->id} with Setting ID: {$validated['ai_setting_id']}, Model: {$validated['ai_model']}, Prompt ID: {$validated['ai_prompt_id']}");
-
         // Dispatch the job
         AnalyzeAllCandidatesJob::dispatch(
             $project->id,
@@ -1171,8 +1141,6 @@ class CandidateController extends Controller
             $details['current_position'] = trim($matches[0]);
         }
 
-        Log::info('Extracted details from resume text:', $details);
-
         return $details;
     }
     
@@ -1221,7 +1189,7 @@ class CandidateController extends Controller
             }
             
             // Get default model
-            $model = $aiSetting->default_model ?? $aiSetting->available_models[0] ?? null;
+            $model = $aiSetting->default_model ?? $aiSetting->models[0] ?? null;
             
             if (!$model) {
                 return redirect()->back()->with('error', 'No models configured for the selected AI setting.');
@@ -1232,7 +1200,6 @@ class CandidateController extends Controller
             
             return redirect()->back()->with('success', 'Candidate analyzed successfully.');
         } catch (\Exception $e) {
-            Log::error("Error analyzing candidate {$candidate->id}: " . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to analyze candidate: ' . $e->getMessage());
         }
     }
@@ -1311,7 +1278,6 @@ class CandidateController extends Controller
             return redirect()->route('projects.candidates.index', $project)
                 ->with('error', 'Invalid action specified.');
         } catch (\Exception $e) {
-            Log::error("Batch action '{$action}' failed: " . $e->getMessage());
             
             return redirect()->route('projects.candidates.index', $project)
                 ->with('error', "Failed to {$action} candidates: " . $e->getMessage());
