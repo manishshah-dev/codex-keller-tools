@@ -329,16 +329,7 @@
             // Remove requirement buttons
             const removeRequirementBtns = document.querySelectorAll('.remove-requirement-btn');
             removeRequirementBtns.forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const requirementItem = this.closest('.requirement-item');
-                    const id = requirementItem.getAttribute('data-id');
-                    const name = requirementItem.querySelector('.font-medium').textContent.trim();
-                    
-                    if (confirm(`Are you sure you want to remove the requirement: ${name}?`)) {
-                        // Send chat message to remove requirement
-                        sendChatMessage(`Remove requirement: ${name}`);
-                    }
-                });
+                attachRemoveRequirementListener(btn);
             });
             
             // Save requirement button
@@ -461,16 +452,52 @@
                 
                 // Add event listener to the remove button
                 const removeBtn = requirementItem.querySelector('.remove-requirement-btn');
-                removeBtn.addEventListener('click', function() {
+                attachRemoveRequirementListener(removeBtn);
+            }
+
+            function attachRemoveRequirementListener(button) {
+                button.addEventListener('click', function() {
+                    const requirementItem = this.closest('.requirement-item');
+                    const id = requirementItem.getAttribute('data-id');
                     const name = requirementItem.querySelector('.font-medium').textContent.trim();
-                    
                     if (confirm(`Are you sure you want to remove the requirement: ${name}?`)) {
-                        // Send chat message to remove requirement
-                        sendChatMessage(`Remove requirement: ${name}`);
+                        fetch('{{ url('projects/'.$project->id.'/requirements') }}/' + id, {
+                            method: 'DELETE',
+                            headers: {
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json',
+                            },
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                requirementItem.remove();
+
+                                const requirementsList = document.getElementById('requirements-list');
+                                if (requirementsList.children.length === 0) {
+                                    const emptyMessage = document.createElement('div');
+                                    emptyMessage.className = 'text-center py-4 text-gray-500';
+                                    emptyMessage.innerHTML = `
+                                        <p>No requirements defined yet.</p>
+                                        <p class="text-sm">Add requirements manually or use the chat interface.</p>
+                                    `;
+                                    requirementsList.appendChild(emptyMessage);
+                                }
+
+                                sendChatMessage(`Remove requirement ${name}`);
+                            } else {
+                                alert('Error removing requirement: ' + (data.message || 'Unknown error'));
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Failed to remove requirement. Please try again.');
+                        });
                     }
                 });
             }
-            
+
+
             // Helper function to get badge class based on requirement type
             function getTypeBadgeClass(type) {
                 const badgeClasses = {

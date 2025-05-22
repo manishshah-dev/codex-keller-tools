@@ -188,6 +188,114 @@
                                 </div>
                             </div>
                         </div>
+
+                        @if($profile->extracted_data)
+                            <div class="mt-8 border-t pt-6">
+                                <h2 class="text-xl font-semibold">Resume Insights</h2>
+                                <div class="mt-4 space-y-6">
+                                    @if(!empty($profile->extracted_data['education']))
+                                        <div>
+                                            <h3 class="text-lg font-medium">Education</h3>
+                                            <ul class="mt-2 space-y-2 list-disc pl-5 text-sm">
+                                                @foreach($profile->extracted_data['education'] as $edu)
+                                                    <li>
+                                                        <span class="font-medium">{{ $edu['degree'] ?? '' }}</span>
+                                                        @if(!empty($edu['institution']))
+                                                            , {{ $edu['institution'] }}
+                                                        @endif
+                                                        @if(!empty($edu['date_range']))
+                                                            <span class="text-gray-500"> ({{ $edu['date_range'] }})</span>
+                                                        @endif
+                                                        @if(!empty($edu['highlights']))
+                                                            <ul class="list-disc pl-5 mt-1">
+                                                                @foreach($edu['highlights'] as $hl)
+                                                                    <li>{{ $hl }}</li>
+                                                                @endforeach
+                                                            </ul>
+                                                        @endif
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    @endif
+
+                                    @if(!empty($profile->extracted_data['experience']))
+                                        <div>
+                                            <h3 class="text-lg font-medium">Experience</h3>
+                                            <ul class="mt-2 space-y-2 list-disc pl-5 text-sm">
+                                                @foreach($profile->extracted_data['experience'] as $exp)
+                                                    <li>
+                                                        <span class="font-medium">{{ $exp['title'] ?? '' }}</span>
+                                                        @if(!empty($exp['company']))
+                                                            at {{ $exp['company'] }}
+                                                        @endif
+                                                        @if(!empty($exp['date_range']))
+                                                            <span class="text-gray-500"> ({{ $exp['date_range'] }})</span>
+                                                        @endif
+                                                        @if(!empty($exp['responsibilities']))
+                                                            <ul class="list-disc pl-5 mt-1">
+                                                                @foreach($exp['responsibilities'] as $resp)
+                                                                    <li>{{ $resp }}</li>
+                                                                @endforeach
+                                                            </ul>
+                                                        @endif
+                                                        @if(!empty($exp['achievements']))
+                                                            <ul class="list-disc pl-5 mt-1">
+                                                                @foreach($exp['achievements'] as $ach)
+                                                                    <li>{{ $ach }}</li>
+                                                                @endforeach
+                                                            </ul>
+                                                        @endif
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    @endif
+
+                                    @if(!empty($profile->extracted_data['skills']))
+                                        <div>
+                                            <h3 class="text-lg font-medium">Skills</h3>
+                                            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                                @foreach($profile->extracted_data['skills'] as $category => $skills)
+                                                    @if(!empty($skills))
+                                                        <div>
+                                                            <h4 class="font-semibold capitalize">{{ str_replace('_', ' ', $category) }}</h4>
+                                                            <ul class="list-disc pl-5 space-y-1 mt-1">
+                                                                @foreach($skills as $skill)
+                                                                    <li>{{ $skill }}</li>
+                                                                @endforeach
+                                                            </ul>
+                                                        </div>
+                                                    @endif
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                    @if(!empty($profile->extracted_data['additional_info']))
+                                        <div>
+                                            <h3 class="text-lg font-medium">Additional Information</h3>
+                                            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                                @foreach($profile->extracted_data['additional_info'] as $category => $items)
+                                                    @if(!empty($items))
+                                                        <div>
+                                                            <h4 class="font-semibold capitalize">{{ str_replace('_', ' ', $category) }}</h4>
+                                                            <ul class="list-disc pl-5 space-y-1 mt-1">
+                                                                @foreach($items as $item)
+                                                                    <li>{{ $item }}</li>
+                                                                @endforeach
+                                                            </ul>
+                                                        </div>
+                                                    @endif
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
+
+
                     </div>
                 </div>
             </div>
