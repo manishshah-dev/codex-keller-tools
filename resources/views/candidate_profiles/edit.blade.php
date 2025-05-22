@@ -38,6 +38,9 @@
                         </div>
                     @endif
 
+                    PHP of extracted data
+                    @php($extracted = old('extracted_data', $profile->extracted_data ?? []))
+
                     <form action="{{ route('projects.candidates.profiles.update', [$project, $candidate, $profile]) }}" method="POST">
                         @csrf
                         @method('PUT')
@@ -60,6 +63,108 @@
                                             <textarea id="summary" name="summary" rows="5" class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md">{{ old('summary', $profile->summary) }}</textarea>
                                         </div>
                                         <p class="mt-2 text-sm text-gray-500">A brief summary of the candidate's qualifications and fit for the role.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Resume Insights -->
+                            <div>
+                                <h3 class="text-lg font-medium leading-6 text-gray-900">Resume Insights</h3>
+                                <div class="mt-4 space-y-6" id="resume-insights">
+                                    <div>
+                                        <h4 class="font-medium">Contact Info</h4>
+                                        <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">Name</label>
+                                                <input type="text" name="extracted_data[contact_info][name]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" value="{{ $extracted['contact_info']['name'] ?? '' }}">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">Email</label>
+                                                <input type="text" name="extracted_data[contact_info][email]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" value="{{ $extracted['contact_info']['email'] ?? '' }}">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">Phone</label>
+                                                <input type="text" name="extracted_data[contact_info][phone]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" value="{{ $extracted['contact_info']['phone'] ?? '' }}">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">Location</label>
+                                                <input type="text" name="extracted_data[contact_info][location]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" value="{{ $extracted['contact_info']['location'] ?? '' }}">
+                                            </div>
+                                            <div class="sm:col-span-2">
+                                                <label class="block text-sm font-medium text-gray-700">LinkedIn</label>
+                                                <input type="text" name="extracted_data[contact_info][linkedin]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" value="{{ $extracted['contact_info']['linkedin'] ?? '' }}">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <div class="flex justify-between items-center">
+                                            <h4 class="font-medium">Education</h4>
+                                            <button type="button" id="add-education-btn" class="text-sm text-indigo-700">Add</button>
+                                        </div>
+                                        <div id="education-container" class="mt-2 space-y-4">
+                                            @php($education = $extracted['education'] ?? [])
+                                            @forelse($education as $index => $edu)
+                                                <div class="education-item border rounded-md p-4">
+                                                    <div class="flex justify-between">
+                                                        <h5 class="font-medium">Entry {{ $index + 1 }}</h5>
+                                                        <button type="button" class="remove-education-btn text-red-600 text-sm">Remove</button>
+                                                    </div>
+                                                    <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        <input type="text" name="extracted_data[education][{{ $index }}][degree]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Degree" value="{{ $edu['degree'] ?? '' }}">
+                                                        <input type="text" name="extracted_data[education][{{ $index }}][institution]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Institution" value="{{ $edu['institution'] ?? '' }}">
+                                                        <input type="text" name="extracted_data[education][{{ $index }}][date_range]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Date Range" value="{{ $edu['date_range'] ?? '' }}">
+                                                        <textarea name="extracted_data[education][{{ $index }}][highlights]" rows="2" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Highlights (one per line)">{{ isset($edu['highlights']) ? implode("\n", $edu['highlights']) : '' }}</textarea>
+                                                    </div>
+                                                </div>
+                                            @empty
+                                            @endforelse
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <div class="flex justify-between items-center">
+                                            <h4 class="font-medium">Experience</h4>
+                                            <button type="button" id="add-experience-btn" class="text-sm text-indigo-700">Add</button>
+                                        </div>
+                                        <div id="experience-container" class="mt-2 space-y-4">
+                                            @php($experience = $extracted['experience'] ?? [])
+                                            @forelse($experience as $index => $exp)
+                                                <div class="experience-item border rounded-md p-4">
+                                                    <div class="flex justify-between">
+                                                        <h5 class="font-medium">Entry {{ $index + 1 }}</h5>
+                                                        <button type="button" class="remove-experience-btn text-red-600 text-sm">Remove</button>
+                                                    </div>
+                                                    <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        <input type="text" name="extracted_data[experience][{{ $index }}][title]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Job Title" value="{{ $exp['title'] ?? '' }}">
+                                                        <input type="text" name="extracted_data[experience][{{ $index }}][company]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Company" value="{{ $exp['company'] ?? '' }}">
+                                                        <input type="text" name="extracted_data[experience][{{ $index }}][date_range]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Date Range" value="{{ $exp['date_range'] ?? '' }}">
+                                                        <textarea name="extracted_data[experience][{{ $index }}][responsibilities]" rows="2" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Responsibilities (one per line)">{{ isset($exp['responsibilities']) ? implode("\n", $exp['responsibilities']) : '' }}</textarea>
+                                                        <textarea name="extracted_data[experience][{{ $index }}][achievements]" rows="2" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Achievements (one per line)">{{ isset($exp['achievements']) ? implode("\n", $exp['achievements']) : '' }}</textarea>
+                                                    </div>
+                                                </div>
+                                            @empty
+                                            @endforelse
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h4 class="font-medium">Skills</h4>
+                                        <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <input type="text" name="extracted_data[skills][technical]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Technical (comma separated)" value="{{ isset($extracted['skills']['technical']) ? implode(',', $extracted['skills']['technical']) : '' }}">
+                                            <input type="text" name="extracted_data[skills][soft]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Soft Skills" value="{{ isset($extracted['skills']['soft']) ? implode(',', $extracted['skills']['soft']) : '' }}">
+                                            <input type="text" name="extracted_data[skills][languages]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Languages" value="{{ isset($extracted['skills']['languages']) ? implode(',', $extracted['skills']['languages']) : '' }}">
+                                            <input type="text" name="extracted_data[skills][certifications]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Certifications" value="{{ isset($extracted['skills']['certifications']) ? implode(',', $extracted['skills']['certifications']) : '' }}">
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h4 class="font-medium">Additional Info</h4>
+                                        <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <input type="text" name="extracted_data[additional_info][interests]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Interests" value="{{ isset($extracted['additional_info']['interests']) ? implode(',', $extracted['additional_info']['interests']) : '' }}">
+                                            <input type="text" name="extracted_data[additional_info][volunteer_work]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Volunteer Work" value="{{ isset($extracted['additional_info']['volunteer_work']) ? implode(',', $extracted['additional_info']['volunteer_work']) : '' }}">
+                                            <input type="text" name="extracted_data[additional_info][publications]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Publications" value="{{ isset($extracted['additional_info']['publications']) ? implode(',', $extracted['additional_info']['publications']) : '' }}">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -220,6 +325,37 @@
                     <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                 </svg>
             </button>
+        </div>
+    </template>
+
+        <template id="education-template">
+        <div class="education-item border rounded-md p-4">
+            <div class="flex justify-between">
+                <h5 class="font-medium">New Entry</h5>
+                <button type="button" class="remove-education-btn text-red-600 text-sm">Remove</button>
+            </div>
+            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input type="text" name="extracted_data[education][INDEX][degree]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Degree">
+                <input type="text" name="extracted_data[education][INDEX][institution]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Institution">
+                <input type="text" name="extracted_data[education][INDEX][date_range]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Date Range">
+                <textarea name="extracted_data[education][INDEX][highlights]" rows="2" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Highlights (one per line)"></textarea>
+            </div>
+        </div>
+    </template>
+
+    <template id="experience-template">
+        <div class="experience-item border rounded-md p-4">
+            <div class="flex justify-between">
+                <h5 class="font-medium">New Entry</h5>
+                <button type="button" class="remove-experience-btn text-red-600 text-sm">Remove</button>
+            </div>
+            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input type="text" name="extracted_data[experience][INDEX][title]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Job Title">
+                <input type="text" name="extracted_data[experience][INDEX][company]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Company">
+                <input type="text" name="extracted_data[experience][INDEX][date_range]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Date Range">
+                <textarea name="extracted_data[experience][INDEX][responsibilities]" rows="2" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Responsibilities (one per line)"></textarea>
+                <textarea name="extracted_data[experience][INDEX][achievements]" rows="2" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Achievements (one per line)"></textarea>
+            </div>
         </div>
     </template>
 
