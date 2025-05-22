@@ -452,6 +452,7 @@
                 
                 // Add event listener to the remove button
                 const removeBtn = requirementItem.querySelector('.remove-requirement-btn');
+
                 removeBtn.addEventListener('click', function() {
                     attachRemoveRequirementListener(removeBtn);
                 });
