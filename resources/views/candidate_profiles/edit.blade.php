@@ -114,7 +114,9 @@
                                                         <input type="text" name="extracted_data[education][{{ $index }}][degree]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Degree" value="{{ $edu['degree'] ?? '' }}">
                                                         <input type="text" name="extracted_data[education][{{ $index }}][institution]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Institution" value="{{ $edu['institution'] ?? '' }}">
                                                         <input type="text" name="extracted_data[education][{{ $index }}][date_range]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Date Range" value="{{ $edu['date_range'] ?? '' }}">
+
                                                         <textarea name="extracted_data[education][{{ $index }}][highlights]" rows="2" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Highlights (one per line)">{{ isset($edu['highlights']) ? (is_array($edu['highlights']) ? implode("\n", $edu['highlights']) : $edu['highlights']) : '' }}</textarea>
+
                                                     </div>
                                                 </div>
                                             @empty
@@ -141,6 +143,7 @@
                                                         <input type="text" name="extracted_data[experience][{{ $index }}][date_range]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Date Range" value="{{ $exp['date_range'] ?? '' }}">
                                                         <textarea name="extracted_data[experience][{{ $index }}][responsibilities]" rows="2" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Responsibilities (one per line)">{{ isset($exp['responsibilities']) ? (is_array($exp['responsibilities']) ? implode("\n", $exp['responsibilities']) : $exp['responsibilities']) : '' }}</textarea>
                                                         <textarea name="extracted_data[experience][{{ $index }}][achievements]" rows="2" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Achievements (one per line)">{{ isset($exp['achievements']) ? (is_array($exp['achievements']) ? implode("\n", $exp['achievements']) : $exp['achievements']) : '' }}</textarea>
+
                                                     </div>
                                                 </div>
                                             @empty
@@ -155,6 +158,7 @@
                                             <input type="text" name="extracted_data[skills][soft]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Soft Skills" value="{{ isset($extracted['skills']['soft']) ? (is_array($extracted['skills']['soft']) ? implode(',', $extracted['skills']['soft']) : $extracted['skills']['soft']) : '' }}">
                                             <input type="text" name="extracted_data[skills][languages]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Languages" value="{{ isset($extracted['skills']['languages']) ? (is_array($extracted['skills']['languages']) ? implode(',', $extracted['skills']['languages']) : $extracted['skills']['languages']) : '' }}">
                                             <input type="text" name="extracted_data[skills][certifications]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Certifications" value="{{ isset($extracted['skills']['certifications']) ? (is_array($extracted['skills']['certifications']) ? implode(',', $extracted['skills']['certifications']) : $extracted['skills']['certifications']) : '' }}">
+
                                         </div>
                                     </div>
 
@@ -164,6 +168,7 @@
                                             <input type="text" name="extracted_data[additional_info][interests]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Interests" value="{{ isset($extracted['additional_info']['interests']) ? (is_array($extracted['additional_info']['interests']) ? implode(',', $extracted['additional_info']['interests']) : $extracted['additional_info']['interests']) : '' }}">
                                             <input type="text" name="extracted_data[additional_info][volunteer_work]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Volunteer Work" value="{{ isset($extracted['additional_info']['volunteer_work']) ? (is_array($extracted['additional_info']['volunteer_work']) ? implode(',', $extracted['additional_info']['volunteer_work']) : $extracted['additional_info']['volunteer_work']) : '' }}">
                                             <input type="text" name="extracted_data[additional_info][publications]" class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Publications" value="{{ isset($extracted['additional_info']['publications']) ? (is_array($extracted['additional_info']['publications']) ? implode(',', $extracted['additional_info']['publications']) : $extracted['additional_info']['publications']) : '' }}">
+
                                         </div>
                                     </div>
                                 </div>
