@@ -162,7 +162,7 @@ class CandidateProfileController extends Controller
         if ($profile->candidate_id !== $candidate->id || $profile->project_id !== $project->id) {
             abort(404, 'Profile not found for this candidate and project');
         }
-        
+
         return view('candidate_profiles.show', compact('project', 'candidate', 'profile'));
     }
 
@@ -184,7 +184,7 @@ class CandidateProfileController extends Controller
         // Get AI settings for profile generation
         $aiSettings = AISetting::active()
             ->get();
-        
+
         return view('candidate_profiles.edit', compact(
             'project',
             'candidate',
@@ -205,7 +205,7 @@ class CandidateProfileController extends Controller
         if ($profile->candidate_id !== $candidate->id || $profile->project_id !== $project->id) {
             abort(404, 'Profile not found for this candidate and project');
         }
-        
+
         // Validate the request
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -214,7 +214,7 @@ class CandidateProfileController extends Controller
             'headings.*.title' => 'required|string|max:255',
             'headings.*.content' => 'required|array',
             'headings.*.order' => 'nullable|integer',
-            'extracted_data' => 'nullable|string',
+            'extracted_data' => 'nullable|array',
         ]);
         
         // Update basic profile info
@@ -257,7 +257,9 @@ class CandidateProfileController extends Controller
         }
         
         // Handle finalization if requested
-        if ($request->has('finalize') && $request->finalize) {
+        // if ($request->has('finalize') && $request->finalize) {
+        if ($request->boolean('finalize')) {
+
             $profile->finalize();
             return redirect()->route('projects.candidates.profiles.show', [
                 'project' => $project,
