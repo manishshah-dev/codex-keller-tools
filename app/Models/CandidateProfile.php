@@ -31,6 +31,9 @@ class CandidateProfile extends Model
         'status',
         'ai_provider',
         'ai_model',
+        'export_format',
+        'export_path',
+        'last_exported_at',
     ];
 
     /**
@@ -46,6 +49,7 @@ class CandidateProfile extends Model
         'web_presence_data' => 'array',
         'is_finalized' => 'boolean',
         'finalized_at' => 'datetime',
+        'last_exported_at' => 'datetime',
     ];
 
     /**

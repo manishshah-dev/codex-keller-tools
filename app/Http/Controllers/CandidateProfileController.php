@@ -8,6 +8,7 @@ use App\Models\ProfileCustomHeading;
 use App\Models\Project;
 use App\Models\AISetting;
 use App\Services\AIService;
+use App\Services\CandidateProfileExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -792,7 +793,7 @@ class CandidateProfileController extends Controller
         ]);
         
         // Get the export service
-        $exportService = new \App\Services\ExportService();
+        $exportService = new \App\Services\CandidateProfileExportService();
         
         // Export the profile
         return $exportService->exportProfile($profile, $validated['format']);
