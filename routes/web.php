@@ -105,6 +105,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // Project Requirements
     Route::post('/projects/{project}/requirements', [ProjectRequirementController::class, 'store'])->name('projects.requirements.store');
+    Route::delete('/projects/{project}/requirements/{requirement}', [ProjectRequirementController::class, 'destroy'])->name('projects.requirements.destroy');
     
     // Candidate Profiles
     Route::get('/profiles', [CandidateProfileController::class, 'projectSelection'])->name('profiles.project-selection');
