@@ -163,7 +163,7 @@ class CandidateProfileController extends Controller
         if ($profile->candidate_id !== $candidate->id || $profile->project_id !== $project->id) {
             abort(404, 'Profile not found for this candidate and project');
         }
-        
+
         return view('candidate_profiles.show', compact('project', 'candidate', 'profile'));
     }
 
@@ -185,7 +185,7 @@ class CandidateProfileController extends Controller
         // Get AI settings for profile generation
         $aiSettings = AISetting::active()
             ->get();
-        
+
         return view('candidate_profiles.edit', compact(
             'project',
             'candidate',
@@ -206,7 +206,7 @@ class CandidateProfileController extends Controller
         if ($profile->candidate_id !== $candidate->id || $profile->project_id !== $project->id) {
             abort(404, 'Profile not found for this candidate and project');
         }
-        
+
         // Validate the request
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -215,6 +215,7 @@ class CandidateProfileController extends Controller
             'headings.*.title' => 'required|string|max:255',
             'headings.*.content' => 'required|array',
             'headings.*.order' => 'nullable|integer',
+            'extracted_data' => 'nullable|array',
         ]);
         
         // Update basic profile info
@@ -222,6 +223,26 @@ class CandidateProfileController extends Controller
             'title' => $validated['title'],
             'summary' => $validated['summary'],
         ]);
+
+        // Normalize and save extracted data if provided
+        if (isset($validated['extracted_data'])) {
+            $extractedData = $validated['extracted_data'];
+
+            if (isset($extractedData['experience']) && is_array($extractedData['experience'])) {
+                foreach ($extractedData['experience'] as $idx => $exp) {
+                    if (isset($exp['responsibilities'])) {
+                        if (is_string($exp['responsibilities'])) {
+                            $lines = preg_split('/\r?\n/', $exp['responsibilities']);
+                            $extractedData['experience'][$idx]['responsibilities'] = array_values(array_filter(array_map('trim', $lines)));
+                        } elseif (!is_array($exp['responsibilities'])) {
+                            $extractedData['experience'][$idx]['responsibilities'] = [];
+                        }
+                    }
+                }
+            }
+
+            $profile->update(['extracted_data' => $extractedData]);
+        }
         
         // Update headings if provided
         if (isset($validated['headings'])) {
@@ -237,7 +258,9 @@ class CandidateProfileController extends Controller
         }
         
         // Handle finalization if requested
-        if ($request->has('finalize') && $request->finalize) {
+        // if ($request->has('finalize') && $request->finalize) {
+        if ($request->boolean('finalize')) {
+
             $profile->finalize();
             return redirect()->route('projects.candidates.profiles.show', [
                 'project' => $project,
@@ -271,6 +294,76 @@ class CandidateProfileController extends Controller
             'project' => $project
         ])->with('success', 'Profile deleted successfully.');
     }
+
+      /**
+     * Normalize extracted data input from the edit form.
+     */
+    private function normalizeExtractedData(array $input, array $existing = []): array
+    {
+        $data = $existing;
+
+        if (isset($input['contact_info'])) {
+            $data['contact_info'] = $input['contact_info'];
+        }
+
+        $data['education'] = [];
+        if (!empty($input['education']) && is_array($input['education'])) {
+            foreach ($input['education'] as $item) {
+                if (!array_filter($item)) {
+                    continue;
+                }
+                $data['education'][] = [
+                    'degree' => $item['degree'] ?? '',
+                    'institution' => $item['institution'] ?? '',
+                    'date_range' => $item['date_range'] ?? '',
+                    'highlights' => isset($item['highlights'])
+                        ? array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $item['highlights']))))
+                        : [],
+                ];
+            }
+        }
+
+        $data['experience'] = [];
+        if (!empty($input['experience']) && is_array($input['experience'])) {
+            foreach ($input['experience'] as $item) {
+                if (!array_filter($item)) {
+                    continue;
+                }
+                $data['experience'][] = [
+                    'title' => $item['title'] ?? '',
+                    'company' => $item['company'] ?? '',
+                    'date_range' => $item['date_range'] ?? '',
+                    'responsibilities' => isset($item['responsibilities'])
+                        ? array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $item['responsibilities']))))
+                        : [],
+                    'achievements' => isset($item['achievements'])
+                        ? array_values(array_filter(array_map('trim', preg_split('/\r?\n/', $item['achievements']))))
+                        : [],
+                ];
+            }
+        }
+
+        $data['skills'] = [];
+        if (isset($input['skills']) && is_array($input['skills'])) {
+            foreach (['technical', 'soft', 'languages', 'certifications'] as $type) {
+                if (isset($input['skills'][$type])) {
+                    $data['skills'][$type] = array_values(array_filter(array_map('trim', explode(',', $input['skills'][$type]))));
+                }
+            }
+        }
+
+        $data['additional_info'] = [];
+        if (isset($input['additional_info']) && is_array($input['additional_info'])) {
+            foreach (['interests', 'volunteer_work', 'publications'] as $type) {
+                if (isset($input['additional_info'][$type])) {
+                    $data['additional_info'][$type] = array_values(array_filter(array_map('trim', explode(',', $input['additional_info'][$type]))));
+                }
+            }
+        }
+
+        return $data;
+    }
+
 
     /**
      * Show the form for generating profile content.
@@ -483,10 +576,6 @@ class CandidateProfileController extends Controller
             
             // Ensure extracted data is an array
             if (!is_array($extractedData)) {
-                Log::warning('extractCandidateData returned non-array value', [
-                    'value' => $extractedData,
-                    'candidate_id' => $candidate->id
-                ]);
                 $extractedData = $this->getDefaultExtractedData($candidate);
             }
             
@@ -568,26 +657,21 @@ class CandidateProfileController extends Controller
                 Auth::id(),
                 'profile_creation'
             );
-            
+
+
             // Parse and return the extracted data
             try {
-                $data = json_decode($response['content'], true);
-                
+                $content = preg_replace('/^```json\s*|\s*```$/', '', $response['content']);
+                $data = json_decode($content, true);
+
                 // Check if json_decode returned null (invalid JSON)
                 if ($data === null) {
-                    Log::error('Failed to parse extracted data: Invalid JSON', [
-                        'response' => $response['content'],
-                    ]);
                     // Return a default structure instead of null
                     return $this->getDefaultExtractedData($candidate);
                 }
                 
                 return $data;
             } catch (Exception $e) {
-                Log::error('Failed to parse extracted data', [
-                    'error' => $e->getMessage(),
-                    'response' => $response['content'],
-                ]);
                 // Return a default structure instead of null
                 return $this->getDefaultExtractedData($candidate);
             }

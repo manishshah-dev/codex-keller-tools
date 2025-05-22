@@ -453,6 +453,7 @@
                 // Add event listener to the remove button
                 const removeBtn = requirementItem.querySelector('.remove-requirement-btn');
                 attachRemoveRequirementListener(removeBtn);
+
             }
 
             function attachRemoveRequirementListener(button) {
@@ -497,7 +498,8 @@
                     }
                 });
             }
-            
+
+
             // Helper function to get badge class based on requirement type
             function getTypeBadgeClass(type) {
                 const badgeClasses = {
