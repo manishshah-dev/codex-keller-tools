@@ -60,7 +60,6 @@ class ProjectRequirementController extends Controller
         }
     }
 
-    
     /**
      * Deactivate (remove) a project requirement.
      */
@@ -92,4 +91,3 @@ class ProjectRequirementController extends Controller
             ], 500);
         }
     }
-}

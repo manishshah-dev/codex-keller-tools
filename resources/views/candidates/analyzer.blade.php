@@ -452,6 +452,7 @@
                 
                 // Add event listener to the remove button
                 const removeBtn = requirementItem.querySelector('.remove-requirement-btn');
+
                 removeBtn.addEventListener('click', function() {
                     attachRemoveRequirementListener(removeBtn);
                 });
@@ -462,8 +463,10 @@
                     const requirementItem = this.closest('.requirement-item');
                     const id = requirementItem.getAttribute('data-id');
                     const name = requirementItem.querySelector('.font-medium').textContent.trim();
+
                     if (confirm(`Are you sure you want to remove the requirement: ${name}?`)) {
                         fetch('{{ url('projects/'.$project->id.'/requirements') }}/' + id, {
+
                             method: 'DELETE',
                             headers: {
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}',
