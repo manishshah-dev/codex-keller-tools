@@ -142,10 +142,14 @@
                                         <div class="sm:col-span-3">
                                             <label for="ai_setting_id" class="block text-sm font-medium text-gray-700">AI Setting</label>
                                             <select id="ai_setting_id" name="ai_setting_id" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                                <option value="">Select AI Setting</option>
                                                 @foreach($aiSettings as $setting)
-                                                    <option value="{{ $setting->id }}" {{ $profile->ai_provider == $setting->provider ? 'selected' : '' }}>
-                                                        {{ ucfirst($setting->provider) }} ({{ $setting->name }})
-                                                    </option>
+                                                     <option value="{{ $setting->id }}"
+                                                             data-provider="{{ $setting->provider }}"
+                                                             data-models='@json($setting->models ?? [])'
+                                                             {{ $profile->ai_provider == $setting->provider ? 'selected' : '' }}>
+                                                         {{ $setting->name }} ({{ ucfirst($setting->provider) }})
+                                                     </option>
                                                 @endforeach
                                             </select>
                                         </div>
@@ -156,6 +160,71 @@
                                                 <!-- Will be populated by JavaScript -->
                                             </select>
                                         </div>
+
+                                        <div class="sm:col-span-3">
+                                            <label for="ai_prompt_id" class="block text-sm font-medium text-gray-700">Resume Extraction Prompt</label>
+                                            <select id="ai_prompt_id" name="ai_prompt_id" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                                <option value="">Use Default/Generic Prompt</option>
+                                                @foreach($prompts as $prompt)
+                                                    <option value="{{ $prompt->id }}"
+                                                            data-provider="{{ $prompt->provider }}"
+                                                            data-model="{{ $prompt->model }}"
+                                                            {{ $prompt->is_default ? '(Default)' : '' }}>
+                                                        {{ $prompt->name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            <p class="mt-1 text-xs text-gray-500">Used for extracting data from the resume</p>
+                                        </div>
+
+                                        <div class="sm:col-span-3">
+                                            <label for="summary_prompt_id" class="block text-sm font-medium text-gray-700">Summary Prompt</label>
+                                            <select id="summary_prompt_id" name="summary_prompt_id" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                                <option value="">Use Default/Generic Prompt</option>
+                                                @foreach($summaryPrompts as $prompt)
+                                                    <option value="{{ $prompt->id }}"
+                                                            data-provider="{{ $prompt->provider }}"
+                                                            data-model="{{ $prompt->model }}"
+                                                            {{ $prompt->is_default ? '(Default)' : '' }}>
+                                                        {{ $prompt->name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            <p class="mt-1 text-xs text-gray-500">Used for generating the profile summary</p>
+                                        </div>
+
+                                        <div class="sm:col-span-3">
+                                            <label for="headings_prompt_id" class="block text-sm font-medium text-gray-700">Headings Prompt</label>
+                                            <select id="headings_prompt_id" name="headings_prompt_id" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                                <option value="">Use Default/Generic Prompt</option>
+                                                @foreach($headingsPrompts as $prompt)
+                                                    <option value="{{ $prompt->id }}"
+                                                            data-provider="{{ $prompt->provider }}"
+                                                            data-model="{{ $prompt->model }}"
+                                                            {{ $prompt->is_default ? '(Default)' : '' }}>
+                                                        {{ $prompt->name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            <p class="mt-1 text-xs text-gray-500">Used for generating profile section headings</p>
+                                        </div>
+
+                                        <div class="sm:col-span-3">
+                                            <label for="content_prompt_id" class="block text-sm font-medium text-gray-700">Content Prompt</label>
+                                            <select id="content_prompt_id" name="content_prompt_id" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                                <option value="">Use Default/Generic Prompt</option>
+                                                @foreach($contentPrompts as $prompt)
+                                                    <option value="{{ $prompt->id }}"
+                                                            data-provider="{{ $prompt->provider }}"
+                                                            data-model="{{ $prompt->model }}"
+                                                            {{ $prompt->is_default ? '(Default)' : '' }}>
+                                                        {{ $prompt->name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            <p class="mt-1 text-xs text-gray-500">Used for generating content for each heading</p>
+                                        </div>
+
                                     </div>
                                 </div>
 
@@ -265,10 +334,17 @@
         const settingModels = @json($aiSettings->mapWithKeys(function($setting) {
             return [$setting->id => $setting->models ?? []];
         }));
+
+        const providerModels = @json($providerModels ?? []);
+        const allPrompts = @json($prompts ?? []);
+        const summaryPrompts = @json($summaryPrompts ?? []);
+        const headingsPrompts = @json($headingsPrompts ?? []);
+        const contentPrompts = @json($contentPrompts ?? []);
         
         document.addEventListener('DOMContentLoaded', function() {
             const aiSettingId = document.getElementById('ai_setting_id');
             const aiModel = document.getElementById('ai_model');
+            const aiPromptId = document.getElementById('ai_prompt_id');
             const generationTypeHeadings = document.getElementById('generation_type_headings');
             const customHeadingsSection = document.getElementById('custom_headings_section');
             const addHeadingBtn = document.getElementById('add_heading_btn');
@@ -277,30 +353,132 @@
             // Function to update model dropdown based on selected setting
             function updateModelDropdown() {
                 const settingId = aiSettingId.value;
-                const models = settingModels[settingId] || [];
-                const currentModel = "{{ $profile->ai_model }}";
+                const selectedOption = aiSettingId.options[aiSettingId.selectedIndex];
+                const provider = selectedOption ? selectedOption.dataset.provider : null;
                 
                 // Clear current options
                 aiModel.innerHTML = '';
                 
-                // Add new options
+                if (!provider) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'Select AI Setting first';
+                    aiModel.appendChild(option);
+                    aiModel.disabled = true;
+                    return;
+                }
+                
+                // Get models for this provider from the providerModels map
+                const models = providerModels[provider] || [];
+                const currentModel = "{{ $profile->ai_model }}";
+                
+                // Get the list of models enabled in this specific setting
+                let enabledModelsInSetting = [];
+                try {
+                    enabledModelsInSetting = JSON.parse(selectedOption.dataset.models || '[]');
+                    if (!Array.isArray(enabledModelsInSetting)) enabledModelsInSetting = [];
+                } catch (e) {
+                    console.error("Error parsing enabled models data attribute:", e);
+                    enabledModelsInSetting = [];
+                }
+                
+                // Determine which model to select
+                let modelToSelect = null;
+                
+                // First, check if the current model is in the available models
+                if (currentModel && models.includes(currentModel)) {
+                    modelToSelect = currentModel;
+                } else if (enabledModelsInSetting.length > 0) {
+                    // Otherwise, select the first model enabled in this setting
+                    modelToSelect = enabledModelsInSetting[0];
+                } else if (models.length > 0) {
+                    // If no enabled models in setting, use the first available model for this provider
+                    modelToSelect = models[0];
+                }
+                
                 if (models.length > 0) {
                     models.forEach(model => {
                         const option = document.createElement('option');
                         option.value = model;
                         option.textContent = model;
-                        if (model === currentModel) {
+                        if (model === modelToSelect) {
                             option.selected = true;
                         }
                         aiModel.appendChild(option);
                     });
+                    aiModel.disabled = false;
                 } else {
                     // Add a default option if no models are available
                     const option = document.createElement('option');
                     option.value = '';
-                    option.textContent = 'No models available';
+                    option.textContent = 'No models available for ' + provider;
                     aiModel.appendChild(option);
+                    aiModel.disabled = true;
                 }
+                
+                updatePromptsDropdown();
+            }
+
+            function updatePromptsDropdown() {
+                const selectedOption = aiSettingId.options[aiSettingId.selectedIndex];
+                const provider = selectedOption ? selectedOption.dataset.provider : null;
+                const model = aiModel.value;
+                
+                // Get all prompt dropdowns
+                const promptDropdowns = [
+                    {
+                        element: aiPromptId,
+                        feature: 'resume_detail_extraction',
+                        prompts: allPrompts
+                    },
+                    {
+                        element: document.getElementById('summary_prompt_id'),
+                        feature: 'profile_summary',
+                        prompts: summaryPrompts
+                    },
+                    {
+                        element: document.getElementById('headings_prompt_id'),
+                        feature: 'profile_headings',
+                        prompts: headingsPrompts
+                    },
+                    {
+                        element: document.getElementById('content_prompt_id'),
+                        feature: 'profile_content',
+                        prompts: contentPrompts
+                    }
+                ];
+                
+                // Update each dropdown
+                promptDropdowns.forEach(dropdown => {
+                    if (!dropdown.element) return;
+                    
+                    // Clear current options
+                    dropdown.element.innerHTML = '<option value="">Use Default/Generic Prompt</option>';
+                    
+                    if (!provider || !model) {
+                        dropdown.element.disabled = true;
+                        return;
+                    }
+                    
+                    // Filter prompts by provider, model and feature
+                    const filtered = dropdown.prompts.filter(p =>
+                        (p.feature === dropdown.feature) &&
+                        (!p.provider || p.provider === provider) &&
+                        (!p.model || p.model === model)
+                    );
+                    
+                    if (filtered.length > 0) {
+                        filtered.forEach(p => {
+                            const opt = document.createElement('option');
+                            opt.value = p.id;
+                            opt.textContent = p.name + (p.is_default ? ' (Default)' : '');
+                            dropdown.element.appendChild(opt);
+                        });
+                        dropdown.element.disabled = false;
+                    } else {
+                        dropdown.element.disabled = false; // Still allow selection of "Use Default/Generic Prompt"
+                    }
+                });
             }
             
             // Function to toggle custom headings section
@@ -352,8 +530,15 @@
             }
             
             // Update models when setting changes
-            aiSettingId.addEventListener('change', updateModelDropdown);
-            
+            // aiSettingId.addEventListener('change', updateModelDropdown);
+             aiSettingId.addEventListener('change', function() {
+                updateModelDropdown();
+                updatePromptsDropdown();
+            });
+
+            // Update prompts when model changes
+            aiModel.addEventListener('change', updatePromptsDropdown);
+
             // Toggle custom headings section when generation type changes
             document.querySelectorAll('input[name="generation_type"]').forEach(function(radio) {
                 radio.addEventListener('change', toggleCustomHeadingsSection);
@@ -376,8 +561,9 @@
                 });
             });
             
-            // Initialize model dropdown
+            // Initialize model dropdown and prompts dropdown
             updateModelDropdown();
+            updatePromptsDropdown();
             
             // Initialize custom headings section
             toggleCustomHeadingsSection();

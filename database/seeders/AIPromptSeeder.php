@@ -354,5 +354,139 @@ class AIPromptSeeder extends Seeder
             'is_default' => true,
             'created_by' => $admin->id,
         ]);
+
+        // Resume detail extraction prompt
+        AIPrompt::create([
+            'feature' => 'resume_detail_extraction',
+            'name' => 'Resume Detail Extraction Prompt',
+            'prompt_template' =>
+                "You are an expert recruiter assistant tasked with extracting key information from a candidate's resume.\n\n" .
+                "RESUME TEXT:\n{{resume_text}}\n\n" .
+                "Extract the following information in JSON format:\n" .
+                "{\n" .
+                "  \"contact_info\": {\n" .
+                "    \"name\": \"\",\n" .
+                "    \"email\": \"\",\n" .
+                "    \"phone\": \"\",\n" .
+                "    \"location\": \"\",\n" .
+                "    \"linkedin\": \"\"\n" .
+                "  },\n" .
+                "  \"education\": [\n" .
+                "    {\n" .
+                "      \"degree\": \"\",\n" .
+                "      \"institution\": \"\",\n" .
+                "      \"date_range\": \"\",\n" .
+                "      \"highlights\": []\n" .
+                "    }\n" .
+                "  ],\n" .
+                "  \"experience\": [\n" .
+                "    {\n" .
+                "      \"title\": \"\",\n" .
+                "      \"company\": \"\",\n" .
+                "      \"date_range\": \"\",\n" .
+                "      \"responsibilities\": [],\n" .
+                "      \"achievements\": []\n" .
+                "    }\n" .
+                "  ],\n" .
+                "  \"skills\": {\n" .
+                "    \"technical\": [],\n" .
+                "    \"soft\": [],\n" .
+                "    \"languages\": [],\n" .
+                "    \"certifications\": []\n" .
+                "  },\n" .
+                "  \"additional_info\": {\n" .
+                "    \"interests\": [],\n" .
+                "    \"volunteer_work\": [],\n" .
+                "    \"publications\": []\n" .
+                "  }\n" .
+                "}\n\n" .
+                "IMPORTANT INSTRUCTIONS:\n" .
+                "1. Return ONLY valid JSON without any additional text or explanation\n" .
+                "2. If information is not available, use null or empty arrays/objects\n" .
+                "3. For dates, use the format provided in the resume\n" .
+                "4. Extract ALL relevant information, even if not explicitly mentioned in the template\n" .
+                "5. For skills, categorize them appropriately based on context",
+            'parameters' => ['resume_text'],
+            // 'provider' => 'openai',
+            // 'model' => 'gpt-4',
+            'is_default' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        // Profile summary generation prompt
+        AIPrompt::create([
+            'feature' => 'profile_summary',
+            'name' => 'Profile Summary Generation Prompt',
+            'prompt_template' =>
+                "You are an expert recruiter assistant tasked with creating a professional summary for a candidate profile.\n\n" .
+                "CANDIDATE DATA:\n{{extracted_data_json}}\n\n" .
+                "JOB TITLE: {{job_title}}\n\n" .
+                "Create a concise, professional summary (2-3 paragraphs) that highlights the candidate's key qualifications, experience, and fit for the role. Focus on their most relevant skills and achievements.\n\n" .
+                "The summary should be written in third person and maintain a professional tone. Do not include any personal opinions or subjective assessments.\n\n" .
+                "IMPORTANT: Return ONLY the summary text without any additional explanations or formatting.",
+            'parameters' => ['extracted_data_json', 'job_title'],
+            'is_default' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        // Profile heading suggestions prompt
+        AIPrompt::create([
+            'feature' => 'profile_headings',
+            'name' => 'Profile Heading Suggestions Prompt',
+            'prompt_template' =>
+                "You are an expert recruiter assistant tasked with suggesting custom headings for a candidate profile.\n\n" .
+                "CANDIDATE DATA:\n{{extracted_data_json}}\n\n" .
+                "JOB REQUIREMENTS:\n{{requirements_json}}\n\n" .
+                "JOB TITLE: {{job_title}}\n\n" .
+                "Suggest 5 custom headings for this candidate's profile that highlight the candidate's strengths for this role. Return in JSON format:\n" .
+                "{\n" .
+                "  \"suggested_headings\": [\n" .
+                "    {\n" .
+                "      \"heading\": \"\",\n" .
+                "      \"rationale\": \"\"\n" .
+                "    }\n" .
+                "  ]\n" .
+                "}\n\n" .
+                "IMPORTANT INSTRUCTIONS:\n" .
+                "1. Return ONLY valid JSON without any additional text or explanation\n" .
+                "2. Create headings that are specific, not generic (e.g., \"Frontend Development Expertise\" not \"Technical Skills\")\n" .
+                "3. Ensure headings highlight areas where the candidate is strong AND that align with job requirements\n" .
+                "4. Provide a clear rationale for each heading suggestion\n" .
+                "5. Include exactly 5 heading suggestions",
+            'parameters' => ['extracted_data_json', 'requirements_json', 'job_title'],
+            'is_default' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        // Profile heading content generation prompt
+        AIPrompt::create([
+            'feature' => 'profile_content',
+            'name' => 'Profile Heading Content Generation Prompt',
+            'prompt_template' =>
+                "You are an expert recruiter assistant tasked with creating impactful bullet points for a candidate profile.\n\n" .
+                "CANDIDATE DATA:\n{{extracted_data_json}}\n\n" .
+                "HEADING: {{heading}}\n\n" .
+                "JOB TITLE: {{job_title}}\n\n" .
+                "Generate 3-5 concise, impactful bullet points that highlight the candidate's relevant experience, skills, and achievements for this heading. Return in JSON format:\n" .
+                "{\n" .
+                "  \"bullet_points\": [\n" .
+                "    {\n" .
+                "      \"content\": \"\",\n" .
+                "      \"evidence_source\": \"resume|interview|web_presence\"\n" .
+                "    }\n" .
+                "  ]\n" .
+                "}\n\n" .
+                "IMPORTANT INSTRUCTIONS:\n" .
+                "1. Return ONLY valid JSON without any additional text or explanation\n" .
+                "2. Each bullet point should be 1-2 sentences maximum\n" .
+                "3. Focus on quantifiable achievements and concrete examples where possible\n" .
+                "4. Use active voice and strong action verbs\n" .
+                "5. Cite the source of evidence for each bullet point (usually 'resume' based on the data provided)\n" .
+                "6. Avoid generic statements - be specific and evidence-based",
+            'parameters' => ['extracted_data_json', 'heading', 'job_title'],
+            'is_default' => true,
+            'created_by' => $admin->id,
+        ]);
+
     }
 }

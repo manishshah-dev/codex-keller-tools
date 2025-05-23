@@ -8,11 +8,14 @@ use App\Models\ProfileCustomHeading;
 use App\Models\Project;
 use App\Models\AISetting;
 use App\Services\AIService;
+use App\Services\CandidateProfileExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
+use App\Services\ModelRegistryService;
+use App\Models\AIPrompt;
 use Exception;
 
 class CandidateProfileController extends Controller
@@ -76,6 +79,13 @@ class CandidateProfileController extends Controller
                 'profile' => $profile
             ])->with('info', 'Profile already exists for this candidate. Editing existing profile.');
         }
+
+        
+        // Get available prompts for resume detail extraction / profile generation
+        $prompts = AIPrompt::where('feature', 'resume_detail_extraction')
+            ->orderBy('name')
+            ->get();
+        
         
         // Get all active AI settings without filtering by capabilities
         $aiSettings = AISetting::active()->get();
@@ -215,6 +225,7 @@ class CandidateProfileController extends Controller
             'headings.*.content' => 'required|array',
             'headings.*.order' => 'nullable|integer',
             'extracted_data' => 'nullable|array',
+            'finalize' => 'nullable|boolean',
         ]);
         
         // Update basic profile info
@@ -222,6 +233,12 @@ class CandidateProfileController extends Controller
             'title' => $validated['title'],
             'summary' => $validated['summary'],
         ]);
+
+
+        if(!array_key_exists('finalize', $validated) && $profile->is_finalized) {
+            $profile->update(['is_finalized' => false]);
+            $profile->finalized_at = null;
+        }
 
         // Normalize and save extracted data if provided
         if (isset($validated['extracted_data'])) {
@@ -243,8 +260,9 @@ class CandidateProfileController extends Controller
             $profile->update(['extracted_data' => $extractedData]);
         }
         
-        // Update headings if provided
+        // Update headings
         if (isset($validated['headings'])) {
+            // If headings are provided, map them
             $headings = collect($validated['headings'])->map(function ($heading, $index) {
                 return [
                     'title' => $heading['title'],
@@ -254,6 +272,11 @@ class CandidateProfileController extends Controller
             })->toArray();
             
             $profile->update(['headings' => $headings]);
+        } else if ($request->has('headings')) {
+            // If headings field was submitted but is empty, set headings to empty array
+            // This handles the case where all headings were removed in the form
+            $profile->update(['headings' => []]);
+            Log::info('All headings removed from profile', ['profile_id' => $profile->id]);
         }
         
         // Handle finalization if requested
@@ -367,7 +390,7 @@ class CandidateProfileController extends Controller
     /**
      * Show the form for generating profile content.
      */
-    public function showGenerate(Project $project, Candidate $candidate, CandidateProfile $profile): View
+    public function showGenerate(Project $project, Candidate $candidate, CandidateProfile $profile, ModelRegistryService $modelRegistryService): View
     {
         $this->authorize('update', $project);
         
@@ -378,6 +401,26 @@ class CandidateProfileController extends Controller
         
         // Get all active AI settings without filtering by capabilities
         $aiSettings = AISetting::active()->get();
+        
+        // Get available prompts for different features
+        $prompts = AIPrompt::where('feature', 'resume_detail_extraction')
+            ->orderBy('name')
+            ->get();
+            
+        $summaryPrompts = AIPrompt::where('feature', 'profile_summary')
+            ->orderBy('name')
+            ->get();
+            
+        $headingsPrompts = AIPrompt::where('feature', 'profile_headings')
+            ->orderBy('name')
+            ->get();
+            
+        $contentPrompts = AIPrompt::where('feature', 'profile_content')
+            ->orderBy('name')
+            ->get();
+            
+        // Get provider models map from service
+        $providerModels = $modelRegistryService->getModels();
         
         // Get custom headings for this project
         try {
@@ -397,7 +440,12 @@ class CandidateProfileController extends Controller
             'profile',
             'aiSettings',
             'customHeadings',
-            'requirements'
+            'requirements',
+            'prompts',
+            'summaryPrompts',
+            'headingsPrompts',
+            'contentPrompts',
+            'providerModels'
         ));
     }
 
@@ -417,6 +465,10 @@ class CandidateProfileController extends Controller
         $validated = $request->validate([
             'ai_setting_id' => 'required|exists:ai_settings,id',
             'ai_model' => 'required|string',
+            'ai_prompt_id' => 'nullable|exists:ai_prompts,id',
+            'summary_prompt_id' => 'nullable|exists:ai_prompts,id',
+            'headings_prompt_id' => 'nullable|exists:ai_prompts,id',
+            'content_prompt_id' => 'nullable|exists:ai_prompts,id',
             'generation_type' => 'required|in:full,headings,content',
             'custom_headings' => 'nullable|array',
             'custom_headings.*' => 'nullable|string',
@@ -440,18 +492,49 @@ class CandidateProfileController extends Controller
                 'status' => 'in_progress',
             ]);
             
+            // Get the selected prompts if provided
+            $extractionPrompt = !empty($validated['ai_prompt_id']) ? AIPrompt::find($validated['ai_prompt_id']) : null;
+            $summaryPrompt = !empty($validated['summary_prompt_id']) ? AIPrompt::find($validated['summary_prompt_id']) : null;
+            $headingsPrompt = !empty($validated['headings_prompt_id']) ? AIPrompt::find($validated['headings_prompt_id']) : null;
+            $contentPrompt = !empty($validated['content_prompt_id']) ? AIPrompt::find($validated['content_prompt_id']) : null;
+            
+            // Verify the prompts are for the correct features
+            if ($extractionPrompt && $extractionPrompt->feature !== 'resume_detail_extraction') {
+                $extractionPrompt = null;
+            }
+            
+            if ($summaryPrompt && $summaryPrompt->feature !== 'profile_summary') {
+                $summaryPrompt = null;
+            }
+            
+            if ($headingsPrompt && $headingsPrompt->feature !== 'profile_headings') {
+                $headingsPrompt = null;
+            }
+            
+            if ($contentPrompt && $contentPrompt->feature !== 'profile_content') {
+                $contentPrompt = null;
+            }
+            
+            // Create a prompts array to pass to generation methods
+            $prompts = [
+                'extraction' => $extractionPrompt,
+                'summary' => $summaryPrompt,
+                'headings' => $headingsPrompt,
+                'content' => $contentPrompt
+            ];
+            
             // Generate content based on generation type
             switch ($validated['generation_type']) {
                 case 'full':
-                    $this->generateFullProfile($aiService, $aiSetting, $validated['ai_model'], $profile, $candidate);
+                    $this->generateFullProfile($aiService, $aiSetting, $validated['ai_model'], $profile, $candidate, $prompts);
                     break;
                     
                 case 'headings':
-                    $this->generateHeadings($aiService, $aiSetting, $validated['ai_model'], $profile, $candidate, $validated['custom_headings'] ?? []);
+                    $this->generateHeadings($aiService, $aiSetting, $validated['ai_model'], $profile, $candidate, $validated['custom_headings'] ?? [], $prompts);
                     break;
                     
                 case 'content':
-                    $this->generateContent($aiService, $aiSetting, $validated['ai_model'], $profile, $candidate);
+                    $this->generateContent($aiService, $aiSetting, $validated['ai_model'], $profile, $candidate, $prompts);
                     break;
             }
             
@@ -475,34 +558,30 @@ class CandidateProfileController extends Controller
     /**
      * Generate a full profile (summary, headings, and content).
      */
-    private function generateFullProfile(AIService $aiService, AISetting $aiSetting, string $model, CandidateProfile $profile, Candidate $candidate)
+    private function generateFullProfile(AIService $aiService, AISetting $aiSetting, string $model, CandidateProfile $profile, Candidate $candidate, array $prompts = [])
     {
         // First, extract data from resume and other sources
-        $extractedData = $this->extractCandidateData($aiService, $aiSetting, $model, $candidate);
+        $extractedData = $this->extractCandidateData($aiService, $aiSetting, $model, $candidate, $prompts['extraction'] ?? null);
         
         // Ensure extracted data is an array
         if (!is_array($extractedData)) {
-            Log::warning('extractCandidateData returned non-array value', [
-                'value' => $extractedData,
-                'candidate_id' => $candidate->id
-            ]);
             $extractedData = $this->getDefaultExtractedData($candidate);
         }
         
         $profile->update(['extracted_data' => $extractedData]);
         
         // Generate summary
-        $summary = $this->generateSummary($aiService, $aiSetting, $model, $candidate, $extractedData);
+        $summary = $this->generateSummary($aiService, $aiSetting, $model, $candidate, $extractedData, $prompts['summary'] ?? null);
         $profile->update(['summary' => $summary]);
         
         // Generate heading suggestions
-        $headingSuggestions = $this->generateHeadingSuggestions($aiService, $aiSetting, $model, $candidate, $extractedData);
+        $headingSuggestions = $this->generateHeadingSuggestions($aiService, $aiSetting, $model, $candidate, $extractedData, $prompts['headings'] ?? null);
         
         // Create headings from suggestions
         $headings = [];
         foreach ($headingSuggestions as $index => $suggestion) {
             // Generate content for each heading
-            $content = $this->generateHeadingContent($aiService, $aiSetting, $model, $candidate, $suggestion['heading'], $extractedData);
+            $content = $this->generateHeadingContent($aiService, $aiSetting, $model, $candidate, $suggestion['heading'], $extractedData, $prompts['content'] ?? null);
             
             $headings[] = [
                 'title' => $suggestion['heading'],
@@ -517,18 +596,14 @@ class CandidateProfileController extends Controller
     /**
      * Generate just the headings for a profile.
      */
-    private function generateHeadings(AIService $aiService, AISetting $aiSetting, string $model, CandidateProfile $profile, Candidate $candidate, array $customHeadings = [])
+    private function generateHeadings(AIService $aiService, AISetting $aiSetting, string $model, CandidateProfile $profile, Candidate $candidate, array $customHeadings = [], array $prompts = [])
     {
         // Extract data if not already done
         if (empty($profile->extracted_data)) {
-            $extractedData = $this->extractCandidateData($aiService, $aiSetting, $model, $candidate);
+            $extractedData = $this->extractCandidateData($aiService, $aiSetting, $model, $candidate, $prompts['extraction'] ?? null);
             
             // Ensure extracted data is an array
             if (!is_array($extractedData)) {
-                Log::warning('extractCandidateData returned non-array value', [
-                    'value' => $extractedData,
-                    'candidate_id' => $candidate->id
-                ]);
                 $extractedData = $this->getDefaultExtractedData($candidate);
             }
             
@@ -549,7 +624,7 @@ class CandidateProfileController extends Controller
             }
         } else {
             // Generate heading suggestions
-            $headingSuggestions = $this->generateHeadingSuggestions($aiService, $aiSetting, $model, $candidate, $extractedData);
+            $headingSuggestions = $this->generateHeadingSuggestions($aiService, $aiSetting, $model, $candidate, $extractedData, $prompts['headings'] ?? null);
             
             $headings = [];
             foreach ($headingSuggestions as $index => $suggestion) {
@@ -567,11 +642,11 @@ class CandidateProfileController extends Controller
     /**
      * Generate content for existing headings.
      */
-    private function generateContent(AIService $aiService, AISetting $aiSetting, string $model, CandidateProfile $profile, Candidate $candidate)
+    private function generateContent(AIService $aiService, AISetting $aiSetting, string $model, CandidateProfile $profile, Candidate $candidate, array $prompts = [])
     {
         // Extract data if not already done
         if (empty($profile->extracted_data)) {
-            $extractedData = $this->extractCandidateData($aiService, $aiSetting, $model, $candidate);
+            $extractedData = $this->extractCandidateData($aiService, $aiSetting, $model, $candidate, $prompts['extraction'] ?? null);
             
             // Ensure extracted data is an array
             if (!is_array($extractedData)) {
@@ -586,7 +661,7 @@ class CandidateProfileController extends Controller
         // Generate content for each existing heading
         $headings = $profile->headings ?: [];
         foreach ($headings as $index => $heading) {
-            $content = $this->generateHeadingContent($aiService, $aiSetting, $model, $candidate, $heading['title'], $extractedData);
+            $content = $this->generateHeadingContent($aiService, $aiSetting, $model, $candidate, $heading['title'], $extractedData, $prompts['content'] ?? null);
             $headings[$index]['content'] = $content;
         }
         
@@ -596,65 +671,89 @@ class CandidateProfileController extends Controller
     /**
      * Extract candidate data from resume and other sources.
      */
-    private function extractCandidateData(AIService $aiService, AISetting $aiSetting, string $model, Candidate $candidate)
+    private function extractCandidateData(AIService $aiService, AISetting $aiSetting, string $model, Candidate $candidate, ?AIPrompt $selectedPrompt = null)
     {
-        // Build prompt for data extraction
-        $prompt = "You are an expert recruiter assistant tasked with extracting key information from a candidate's resume.\n\n";
-        $prompt .= "RESUME TEXT:\n" . $candidate->resume_text . "\n\n";
-        $prompt .= "Extract the following information in JSON format:\n";
-        $prompt .= "{\n";
-        $prompt .= "  \"contact_info\": {\n";
-        $prompt .= "    \"name\": \"\",\n";
-        $prompt .= "    \"email\": \"\",\n";
-        $prompt .= "    \"phone\": \"\",\n";
-        $prompt .= "    \"location\": \"\",\n";
-        $prompt .= "    \"linkedin\": \"\"\n";
-        $prompt .= "  },\n";
-        $prompt .= "  \"education\": [\n";
-        $prompt .= "    {\n";
-        $prompt .= "      \"degree\": \"\",\n";
-        $prompt .= "      \"institution\": \"\",\n";
-        $prompt .= "      \"date_range\": \"\",\n";
-        $prompt .= "      \"highlights\": []\n";
-        $prompt .= "    }\n";
-        $prompt .= "  ],\n";
-        $prompt .= "  \"experience\": [\n";
-        $prompt .= "    {\n";
-        $prompt .= "      \"title\": \"\",\n";
-        $prompt .= "      \"company\": \"\",\n";
-        $prompt .= "      \"date_range\": \"\",\n";
-        $prompt .= "      \"responsibilities\": [],\n";
-        $prompt .= "      \"achievements\": []\n";
-        $prompt .= "    }\n";
-        $prompt .= "  ],\n";
-        $prompt .= "  \"skills\": {\n";
-        $prompt .= "    \"technical\": [],\n";
-        $prompt .= "    \"soft\": [],\n";
-        $prompt .= "    \"languages\": [],\n";
-        $prompt .= "    \"certifications\": []\n";
-        $prompt .= "  },\n";
-        $prompt .= "  \"additional_info\": {\n";
-        $prompt .= "    \"interests\": [],\n";
-        $prompt .= "    \"volunteer_work\": [],\n";
-        $prompt .= "    \"publications\": []\n";
-        $prompt .= "  }\n";
-        $prompt .= "}\n\n";
-        $prompt .= "IMPORTANT INSTRUCTIONS:\n";
-        $prompt .= "1. Return ONLY valid JSON without any additional text or explanation\n";
-        $prompt .= "2. If information is not available, use null or empty arrays/objects\n";
-        $prompt .= "3. For dates, use the format provided in the resume\n";
-        $prompt .= "4. Extract ALL relevant information, even if not explicitly mentioned in the template\n";
-        $prompt .= "5. For skills, categorize them appropriately based on context";
+        // Retrieve default prompt for resume detail extraction
+        $prompt = AIPrompt::forFeature('resume_detail_extraction')
+            ->forProvider($aiSetting->provider)
+            ->forModel($model)
+            ->default()
+            ->first();
+
+        if (!$prompt) {
+            $template = "You are an expert recruiter assistant tasked with extracting key information from a candidate's resume.\n\n" .
+                "RESUME TEXT:\n{{resume_text}}\n\n" .
+                "Extract the following information in JSON format:\n" .
+                "{\n" .
+                "  \"contact_info\": {\n" .
+                "    \"name\": \"\",\n" .
+                "    \"email\": \"\",\n" .
+                "    \"phone\": \"\",\n" .
+                "    \"location\": \"\",\n" .
+                "    \"linkedin\": \"\"\n" .
+                "  },\n" .
+                "  \"education\": [\n" .
+                "    {\n" .
+                "      \"degree\": \"\",\n" .
+                "      \"institution\": \"\",\n" .
+                "      \"date_range\": \"\",\n" .
+                "      \"highlights\": []\n" .
+                "    }\n" .
+                "  ],\n" .
+                "  \"experience\": [\n" .
+                "    {\n" .
+                "      \"title\": \"\",\n" .
+                "      \"company\": \"\",\n" .
+                "      \"date_range\": \"\",\n" .
+                "      \"responsibilities\": [],\n" .
+                "      \"achievements\": []\n" .
+                "    }\n" .
+                "  ],\n" .
+                "  \"skills\": {\n" .
+                "    \"technical\": [],\n" .
+                "    \"soft\": [],\n" .
+                "    \"languages\": [],\n" .
+                "    \"certifications\": []\n" .
+                "  },\n" .
+                "  \"additional_info\": {\n" .
+                "    \"interests\": [],\n" .
+                "    \"volunteer_work\": [],\n" .
+                "    \"publications\": []\n" .
+                "  }\n" .
+                "}\n\n" .
+                "IMPORTANT INSTRUCTIONS:\n" .
+                "1. Return ONLY valid JSON without any additional text or explanation\n" .
+                "2. If information is not available, use null or empty arrays/objects\n" .
+                "3. For dates, use the format provided in the resume\n" .
+                "4. Extract ALL relevant information, even if not explicitly mentioned in the template\n" .
+                "5. For skills, categorize them appropriately based on context";
+
+            $prompt = new AIPrompt([
+                'feature' => 'resume_detail_extraction',
+                'name' => 'Resume Detail Extraction Prompt',
+                'prompt_template' => $template,
+                'provider' => $aiSetting->provider,
+                'model' => $model,
+                'is_default' => true,
+                'created_by' => Auth::id(),
+            ]);
+            $prompt->save();
+        }
+
+        $formattedPrompt = $prompt->formatPrompt([
+            'resume_text' => $candidate->resume_text,
+        ]);
         
         try {
             // Call AI service
             $response = $aiService->generateContent(
                 $aiSetting,
                 $model,
-                $prompt,
+                $formattedPrompt,
                 ['response_format' => 'json_object'],
                 Auth::id(),
-                'profile_creation'
+                // 'profile_creation',
+                'resume_detail_extraction'
             );
 
 
@@ -675,10 +774,6 @@ class CandidateProfileController extends Controller
                 return $this->getDefaultExtractedData($candidate);
             }
         } catch (Exception $e) {
-            Log::error('Failed to extract candidate data', [
-                'error' => $e->getMessage(),
-                'candidate_id' => $candidate->id,
-            ]);
             // Return a default structure instead of null
             return $this->getDefaultExtractedData($candidate);
         }
@@ -727,19 +822,52 @@ class CandidateProfileController extends Controller
      */
     private function generateSummary(AIService $aiService, AISetting $aiSetting, string $model, Candidate $candidate, array $extractedData)
     {
-        // Build prompt for summary generation
-        $prompt = "You are an expert recruiter assistant tasked with creating a professional summary for a candidate profile.\n\n";
-        $prompt .= "CANDIDATE DATA:\n" . json_encode($extractedData, JSON_PRETTY_PRINT) . "\n\n";
-        $prompt .= "JOB TITLE: " . $candidate->project->title . "\n\n";
-        $prompt .= "Create a concise, professional summary (2-3 paragraphs) that highlights the candidate's key qualifications, experience, and fit for the role. Focus on their most relevant skills and achievements.\n\n";
-        $prompt .= "The summary should be written in third person and maintain a professional tone. Do not include any personal opinions or subjective assessments.\n\n";
-        $prompt .= "IMPORTANT: Return ONLY the summary text without any additional explanations or formatting.";
+        // Try to find a prompt for profile summary
+        $prompt = AIPrompt::where('feature', 'profile_summary')
+            ->where(function($query) use ($aiSetting) {
+                $query->where('provider', $aiSetting->provider)
+                    ->orWhereNull('provider');
+            })
+            ->where(function($query) use ($model) {
+                $query->where('model', $model)
+                    ->orWhereNull('model');
+            })
+            ->where('is_default', true)
+            ->first();
+            
+        if (!$prompt) {
+            // Create a default prompt if none exists
+            $promptTemplate = "You are an expert recruiter assistant tasked with creating a professional summary for a candidate profile.\n\n" .
+                "CANDIDATE DATA:\n{{extracted_data_json}}\n\n" .
+                "JOB TITLE: {{job_title}}\n\n" .
+                "Create a concise, professional summary (2-3 paragraphs) that highlights the candidate's key qualifications, experience, and fit for the role. Focus on their most relevant skills and achievements.\n\n" .
+                "The summary should be written in third person and maintain a professional tone. Do not include any personal opinions or subjective assessments.\n\n" .
+                "IMPORTANT: Return ONLY the summary text without any additional explanations or formatting.";
+                
+            $prompt = new AIPrompt([
+                'feature' => 'profile_summary',
+                'name' => 'Profile Summary Generation Prompt',
+                'prompt_template' => $promptTemplate,
+                'provider' => $aiSetting->provider,
+                'model' => $model,
+                'is_default' => true,
+                'created_by' => Auth::id(),
+            ]);
+            $prompt->save();
+        
+        }
+        
+        // Format the prompt with data
+        $formattedPrompt = $prompt->formatPrompt([
+            'extracted_data_json' => json_encode($extractedData, JSON_PRETTY_PRINT),
+            'job_title' => $candidate->project->title
+        ]);
         
         // Call AI service
         $response = $aiService->generateContent(
             $aiSetting,
             $model,
-            $prompt,
+            $formattedPrompt,
             [],
             Auth::id(),
             'profile_creation'
@@ -764,32 +892,65 @@ class CandidateProfileController extends Controller
             ];
         })->toJson();
         
-        // Build prompt for heading suggestions
-        $prompt = "You are an expert recruiter assistant tasked with suggesting custom headings for a candidate profile.\n\n";
-        $prompt .= "CANDIDATE DATA:\n" . json_encode($extractedData, JSON_PRETTY_PRINT) . "\n\n";
-        $prompt .= "JOB REQUIREMENTS:\n" . $requirementsJson . "\n\n";
-        $prompt .= "JOB TITLE: " . $candidate->project->title . "\n\n";
-        $prompt .= "Suggest 5 custom headings for this candidate's profile that highlight the candidate's strengths for this role. Return in JSON format:\n";
-        $prompt .= "{\n";
-        $prompt .= "  \"suggested_headings\": [\n";
-        $prompt .= "    {\n";
-        $prompt .= "      \"heading\": \"\",\n";
-        $prompt .= "      \"rationale\": \"\"\n";
-        $prompt .= "    }\n";
-        $prompt .= "  ]\n";
-        $prompt .= "}\n\n";
-        $prompt .= "IMPORTANT INSTRUCTIONS:\n";
-        $prompt .= "1. Return ONLY valid JSON without any additional text or explanation\n";
-        $prompt .= "2. Create headings that are specific, not generic (e.g., \"Frontend Development Expertise\" not \"Technical Skills\")\n";
-        $prompt .= "3. Ensure headings highlight areas where the candidate is strong AND that align with job requirements\n";
-        $prompt .= "4. Provide a clear rationale for each heading suggestion\n";
-        $prompt .= "5. Include exactly 5 heading suggestions";
+        // Try to find a prompt for profile headings
+        $prompt = AIPrompt::where('feature', 'profile_headings')
+            ->where(function($query) use ($aiSetting) {
+                $query->where('provider', $aiSetting->provider)
+                    ->orWhereNull('provider');
+            })
+            ->where(function($query) use ($model) {
+                $query->where('model', $model)
+                    ->orWhereNull('model');
+            })
+            ->where('is_default', true)
+            ->first();
+            
+        if (!$prompt) {
+            // Create a default prompt if none exists
+            $promptTemplate = "You are an expert recruiter assistant tasked with suggesting custom headings for a candidate profile.\n\n" .
+                "CANDIDATE DATA:\n{{extracted_data_json}}\n\n" .
+                "JOB REQUIREMENTS:\n{{requirements_json}}\n\n" .
+                "JOB TITLE: {{job_title}}\n\n" .
+                "Suggest 5 custom headings for this candidate's profile that highlight the candidate's strengths for this role. Return in JSON format:\n" .
+                "{\n" .
+                "  \"suggested_headings\": [\n" .
+                "    {\n" .
+                "      \"heading\": \"\",\n" .
+                "      \"rationale\": \"\"\n" .
+                "    }\n" .
+                "  ]\n" .
+                "}\n\n" .
+                "IMPORTANT INSTRUCTIONS:\n" .
+                "1. Return ONLY valid JSON without any additional text or explanation\n" .
+                "2. Create headings that are specific, not generic (e.g., \"Frontend Development Expertise\" not \"Technical Skills\")\n" .
+                "3. Ensure headings highlight areas where the candidate is strong AND that align with job requirements\n" .
+                "4. Provide a clear rationale for each heading suggestion\n" .
+                "5. Include exactly 5 heading suggestions";
+                
+            $prompt = new AIPrompt([
+                'feature' => 'profile_headings',
+                'name' => 'Profile Heading Content Generation Prompt',
+                'prompt_template' => $promptTemplate,
+                'provider' => $aiSetting->provider,
+                'model' => $model,
+                'is_default' => true,
+                'created_by' => Auth::id(),
+            ]);
+            $prompt->save();
+        }
+        
+        // Format the prompt with data
+        $formattedPrompt = $prompt->formatPrompt([
+            'extracted_data_json' => json_encode($extractedData, JSON_PRETTY_PRINT),
+            'requirements_json' => $requirementsJson,
+            'job_title' => $candidate->project->title
+        ]);
         
         // Call AI service
         $response = $aiService->generateContent(
             $aiSetting,
             $model,
-            $prompt,
+            $formattedPrompt,
             ['response_format' => 'json_object'],
             Auth::id(),
             'profile_creation'
@@ -800,10 +961,6 @@ class CandidateProfileController extends Controller
             $data = json_decode($response['content'], true);
             return $data['suggested_headings'] ?? [];
         } catch (Exception $e) {
-            Log::error('Failed to parse heading suggestions', [
-                'error' => $e->getMessage(),
-                'response' => $response['content'],
-            ]);
             return [];
         }
     }
@@ -813,33 +970,66 @@ class CandidateProfileController extends Controller
      */
     private function generateHeadingContent(AIService $aiService, AISetting $aiSetting, string $model, Candidate $candidate, string $heading, array $extractedData)
     {
-        // Build prompt for content generation
-        $prompt = "You are an expert recruiter assistant tasked with creating impactful bullet points for a candidate profile.\n\n";
-        $prompt .= "CANDIDATE DATA:\n" . json_encode($extractedData, JSON_PRETTY_PRINT) . "\n\n";
-        $prompt .= "HEADING: " . $heading . "\n\n";
-        $prompt .= "JOB TITLE: " . $candidate->project->title . "\n\n";
-        $prompt .= "Generate 3-5 concise, impactful bullet points that highlight the candidate's relevant experience, skills, and achievements for this heading. Return in JSON format:\n";
-        $prompt .= "{\n";
-        $prompt .= "  \"bullet_points\": [\n";
-        $prompt .= "    {\n";
-        $prompt .= "      \"content\": \"\",\n";
-        $prompt .= "      \"evidence_source\": \"resume|interview|web_presence\"\n";
-        $prompt .= "    }\n";
-        $prompt .= "  ]\n";
-        $prompt .= "}\n\n";
-        $prompt .= "IMPORTANT INSTRUCTIONS:\n";
-        $prompt .= "1. Return ONLY valid JSON without any additional text or explanation\n";
-        $prompt .= "2. Each bullet point should be 1-2 sentences maximum\n";
-        $prompt .= "3. Focus on quantifiable achievements and concrete examples where possible\n";
-        $prompt .= "4. Use active voice and strong action verbs\n";
-        $prompt .= "5. Cite the source of evidence for each bullet point (usually 'resume' based on the data provided)\n";
-        $prompt .= "6. Avoid generic statements - be specific and evidence-based";
+        // Try to find a prompt for profile content
+        $prompt = AIPrompt::where('feature', 'profile_content')
+            ->where(function($query) use ($aiSetting) {
+                $query->where('provider', $aiSetting->provider)
+                    ->orWhereNull('provider');
+            })
+            ->where(function($query) use ($model) {
+                $query->where('model', $model)
+                    ->orWhereNull('model');
+            })
+            ->where('is_default', true)
+            ->first();
+            
+        if (!$prompt) {
+            // Create a default prompt if none exists
+            $promptTemplate = "You are an expert recruiter assistant tasked with creating impactful bullet points for a candidate profile.\n\n" .
+                "CANDIDATE DATA:\n{{extracted_data_json}}\n\n" .
+                "HEADING: {{heading}}\n\n" .
+                "JOB TITLE: {{job_title}}\n\n" .
+                "Generate 3-5 concise, impactful bullet points that highlight the candidate's relevant experience, skills, and achievements for this heading. Return in JSON format:\n" .
+                "{\n" .
+                "  \"bullet_points\": [\n" .
+                "    {\n" .
+                "      \"content\": \"\",\n" .
+                "      \"evidence_source\": \"resume|interview|web_presence\"\n" .
+                "    }\n" .
+                "  ]\n" .
+                "}\n\n" .
+                "IMPORTANT INSTRUCTIONS:\n" .
+                "1. Return ONLY valid JSON without any additional text or explanation\n" .
+                "2. Each bullet point should be 1-2 sentences maximum\n" .
+                "3. Focus on quantifiable achievements and concrete examples where possible\n" .
+                "4. Use active voice and strong action verbs\n" .
+                "5. Cite the source of evidence for each bullet point (usually 'resume' based on the data provided)\n" .
+                "6. Avoid generic statements - be specific and evidence-based";
+                
+            $prompt = new AIPrompt([
+                'feature' => 'profile_content',
+                'name' => 'Profile Heading Content Generation Prompt',
+                'prompt_template' => $promptTemplate,
+                'provider' => $aiSetting->provider,
+                'model' => $model,
+                'is_default' => true,
+                'created_by' => Auth::id(),
+            ]);
+            $prompt->save();
+        }
+        
+        // Format the prompt with data
+        $formattedPrompt = $prompt->formatPrompt([
+            'extracted_data_json' => json_encode($extractedData, JSON_PRETTY_PRINT),
+            'heading' => $heading,
+            'job_title' => $candidate->project->title
+        ]);
         
         // Call AI service
         $response = $aiService->generateContent(
             $aiSetting,
             $model,
-            $prompt,
+            $formattedPrompt,
             ['response_format' => 'json_object'],
             Auth::id(),
             'profile_creation'
@@ -875,10 +1065,19 @@ class CandidateProfileController extends Controller
             'format' => 'required|in:pdf,docx,html',
         ]);
         
-        // Get the export service
-        $exportService = new \App\Services\ExportService();
-        
-        // Export the profile
-        return $exportService->exportProfile($profile, $validated['format']);
+        $format = $validated['format'];
+
+        try {
+            $exportService = new \App\Services\CandidateProfileExportService();
+            $result = $exportService->exportProfile($profile, $validated['format']);
+
+            return response()->download(
+                storage_path('app/' . $result['file_path']),
+                basename($result['file_path'])
+            );
+        } catch (\Exception $e) {
+            return redirect()->route('projects.candidates.profiles.show', [$project, $candidate, $profile])
+                ->with('error', 'Failed to export profile: ' . $e->getMessage());
+        }
     }
 }
