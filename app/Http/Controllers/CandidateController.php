@@ -1197,8 +1197,13 @@ class CandidateController extends Controller
             
             // Analyze the candidate
             $this->analyzeCandidate($candidate, $aiSetting, $model);
-            
-            return redirect()->back()->with('success', 'Candidate analyzed successfully.');
+
+            $candidate->refresh();
+            if ($candidate->status === 'analyzed') {
+                return redirect()->back()->with('success', 'Candidate analyzed successfully.');
+            }
+
+            return redirect()->back()->with('error', 'Candidate analysis failed.');
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Failed to analyze candidate: ' . $e->getMessage());
         }

@@ -72,4 +72,44 @@ class ProjectRequirementController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Deactivate (remove) a project requirement.
+     */
+    public function destroy(Project $project, ProjectRequirement $requirement)
+    {
+        $this->authorize('update', $project);
+
+        if ($requirement->project_id !== $project->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Requirement not found for this project',
+            ], 404);
+        }
+
+        try {
+            $requirement->is_active = false;
+            $requirement->save();
+
+            Log::info('Project requirement removed via CV Analyzer', [
+                'project_id' => $project->id,
+                'requirement_id' => $requirement->id,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Requirement removed successfully',
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to remove project requirement: ' . $e->getMessage(), [
+                'project_id' => $project->id,
+                'requirement_id' => $requirement->id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to remove requirement: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }
