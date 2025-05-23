@@ -80,13 +80,6 @@ Do not include any text, markdown formatting, or code blocks outside the JSON. D
             $content = $response['content'];
 
         } catch (Exception $e) {
-            // Log error before re-throwing
-            Log::error("AI API call failed for feature '{$feature}' using provider '{$aiSetting->provider}' model '{$model}': {$e->getMessage()}", [
-                'setting_id' => $aiSetting->id,
-                'exception' => $e, // Log the full exception if needed
-            ]);
-            // Removed logging for failed API call
-            
             throw $e; // Re-throw the exception after logging
         }
 
@@ -298,7 +291,6 @@ Do not include any text, markdown formatting, or code blocks outside the JSON. D
                 ];
             } 
 
-            Log::info('Google Search enabled for API call', ['model' => $model]);
         }
 
         try {
@@ -318,20 +310,14 @@ Do not include any text, markdown formatting, or code blocks outside the JSON. D
             }
 
             $responseData = $response->json();
-            // Log the full raw response for debugging
-            // Use Log::info to ensure visibility regardless of LOG_LEVEL
-            Log::info('Raw Google API Response received.');
-            Log::info('Raw Google API Response Body:', ['response_body' => json_encode($responseData)]); // Optionally log body if needed, ensure it's serializable
             
             // Safely access nested data, checking if 'candidates' exists and is not empty
             if (!empty($responseData['candidates']) && isset($responseData['candidates'][0]['content']['parts'][0]['text'])) {
                 $content = $responseData['candidates'][0]['content']['parts'][0]['text'];
             } else {
                 // Log a warning if the expected content structure is missing
-                Log::warning('Google API response missing expected content structure (candidates[0].content.parts[0].text).', ['response_body' => json_encode($responseData)]);
                 $content = ''; // Set content to empty if not found
             }
-            Log::info('Extracted Google API Content:', ['content' => $content]);
 
             // Google doesn't provide token usage in the response, so we'll estimate
             // Roughly 4 characters per token
@@ -355,7 +341,6 @@ Do not include any text, markdown formatting, or code blocks outside the JSON. D
             ];
         } catch (Exception $e) {
             // Log the specific exception message from the HTTP call
-            Log::error("Google API HTTP request failed: " . $e->getMessage(), ['exception' => $e]);
             throw new Exception("Google API call failed: {$e->getMessage()}");
         }
     }
@@ -380,15 +365,12 @@ public function analyzeCvAgainstRequirements(
 ): array {
     $userId = $project->user_id; // Get user ID from project
     $feature = 'cv_analyzer';
-    Log::info("Starting CV analysis using {$aiSetting->provider} model {$model}. Setting ID: {$aiSetting->id}");
 
     // 1. Construct the Prompt
     // Use the specific prompt if provided, otherwise use the default JSON prompt
     if ($aiPrompt && !empty($aiPrompt->prompt_template)) {
         $promptTemplate = $aiPrompt->prompt_template;
-        Log::info("Using specific prompt template ID: {$aiPrompt->id}");
     } else {
-        Log::info("Using default JSON prompt template.");
         // Default/Generic Prompt asking for JSON output
         $promptTemplate = <<<PROMPT
 You are an expert recruitment assistant. Analyze the following resume text based on the provided job requirements.
@@ -436,9 +418,6 @@ PROMPT;
         'max_tokens' => $aiPrompt->max_tokens ?? 3000,   // Adjust as needed (restored from test)
     ];
 
-    // Log the final prompt being sent (using info level)
-    Log::info('Final prompt for CV analysis:', ['prompt' => $finalPrompt]);
-
     // 2. Call the AI Service (using existing generateContent)
     try {
         $aiResponse = $this->generateContent(
@@ -451,7 +430,6 @@ PROMPT;
         );
 
         $rawContent = trim($aiResponse['content']);
-        Log::debug("Raw AI response for CV analysis: " . $rawContent);
 
         // 3. Parse the Response (Prioritize JSON)
         $matchScore = null;
@@ -483,7 +461,6 @@ PROMPT;
                     $matchScore = $potentialScore;
                     // Store the whole parsed data as details if JSON is valid
                     $analysisDetails = $parsedData;
-                    Log::info("Successfully parsed match_score {$matchScore} from JSON response.");
                     
                     // Validate and ensure all expected fields exist
                     if (!isset($parsedData['justification'])) {
@@ -505,48 +482,37 @@ PROMPT;
                     // Update analysis details with the validated data
                     $analysisDetails = $parsedData;
                 } else {
-                    Log::warning("Parsed JSON match_score '{$potentialScore}' is outside the valid 0.0-1.0 range.");
                     $parsedData = null; // Invalidate parsed data if score is bad
                 }
             } else {
-                 Log::warning("AI response was not valid JSON or missing 'match_score'. Error: " . json_last_error_msg());
                  $parsedData = null; // Ensure parsedData is null if JSON is invalid
             }
         } catch (\Exception $e) {
-             Log::error("Error during JSON decoding: " . $e->getMessage());
              $parsedData = null;
         }
 
         // Fallback to Regex if JSON parsing failed or didn't yield a score
         if ($matchScore === null) {
-            Log::info("Falling back to regex parsing for score extraction.");
             // Try to find "Overall Match Score: XX%" pattern
             if (preg_match('/Overall Match Score:\s*(\d+)%?/i', $rawContent, $matches)) {
                 $potentialScore = (int)$matches[1];
                 if ($potentialScore >= 0 && $potentialScore <= 100) {
                     $matchScore = $potentialScore / 100.0;
-                    Log::info("Extracted score {$matchScore} from 'Overall Match Score: XX%' pattern (fallback).");
-                } else { Log::warning("Regex fallback: Extracted score '{$potentialScore}%' is outside the valid 0-100 range."); }
+                }
             }
             // Fallback: Try to find the first standalone percentage value
             elseif (preg_match('/(\d+)%/i', $rawContent, $matches)) {
                  $potentialScore = (int)$matches[1];
                  if ($potentialScore >= 0 && $potentialScore <= 100) {
                      $matchScore = $potentialScore / 100.0;
-                     Log::info("Extracted score {$matchScore} from first standalone percentage pattern (fallback).");
-                 } else { Log::warning("Regex fallback: Extracted standalone percentage '{$potentialScore}%' is outside the valid 0-100 range."); }
+                 } 
             }
             // Fallback: Try to find the first standalone decimal value between 0 and 1
              elseif (preg_match('/\b(0\.\d+|1\.0|0)\b/', $rawContent, $matches)) {
                  $potentialScore = (float)$matches[1];
                  if ($potentialScore >= 0.0 && $potentialScore <= 1.0) {
                      $matchScore = $potentialScore;
-                     Log::info("Extracted score {$matchScore} from first standalone decimal pattern (fallback).");
-                 } else { Log::warning("Regex fallback: Extracted decimal '{$potentialScore}' is outside the valid 0.0-1.0 range."); }
-             }
-
-             if ($matchScore === null) {
-                  Log::warning("Could not extract a valid numeric match score using JSON or regex fallbacks.");
+                 } 
              }
         }
 
@@ -561,7 +527,6 @@ PROMPT;
         ];
 
     } catch (Exception $e) {
-        Log::error("CV analysis failed for Setting ID {$aiSetting->id}, Model {$model}: {$e->getMessage()}");
         return [
             'match_score' => null,
             'status' => 'analysis_failed',

@@ -119,11 +119,18 @@
                                 </div>
                                 
                                 @if($candidate->last_analyzed_at)
-                                <div>
-                                    <p class="text-sm text-gray-500">Last Analyzed</p>
-                                    <p class="font-medium">{{ $candidate->last_analyzed_at->format('M d, Y H:i') }}</p>
-                                </div>
+                                    <div>
+                                        <p class="text-sm text-gray-500">Last Analyzed</p>
+                                        <p class="font-medium">{{ $candidate->last_analyzed_at->format('M d, Y H:i') }}</p>
+                                    </div>
                                 @endif
+
+                                <div class="pt-4">
+                                    <form action="{{ route('candidates.analyze', $candidate) }}" method="POST" onsubmit="return confirm('Analyze this candidate?');">
+                                        @csrf
+                                        <x-primary-button>{{ __('Analyze Candidate') }}</x-primary-button>
+                                    </form>
+                                </div>
                             </div>
                         </div>
                     </div>

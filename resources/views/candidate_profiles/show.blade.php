@@ -29,12 +29,12 @@
                     Word
                 </a>
                 @if(!$profile->is_finalized)
-                <a href="{{ route('projects.candidates.profiles.edit', [$project, $candidate, $profile]) }}" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    <svg class="-ml-0.5 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                    </svg>
-                    Edit
-                </a>
+                    <a href="{{ route('projects.candidates.profiles.edit', [$project, $candidate, $profile]) }}" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <svg class="-ml-0.5 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                        </svg>
+                        Edit
+                    </a>
                 @endif
             </div>
         </div>
@@ -95,9 +95,10 @@
 
                         @if($profile->headings && count($profile->formatted_headings) > 0)
                             <div class="mt-8">
+                                <h2 class="text-xl font-semibold border-b pb-2 mb-6">Profile Highlights</h2>
                                 @foreach($profile->formatted_headings as $heading)
                                     <div class="mb-6">
-                                        <h2 class="text-xl font-semibold border-b pb-2">{{ $heading['title'] }}</h2>
+                                        <h3 class="text-l font-semibold border-b pb-2">{{ $heading['title'] }}</h2>
                                         <ul class="mt-4 list-disc pl-5 space-y-2">
                                             @foreach($heading['content'] as $bullet)
                                                 <li class="text-gray-700">
@@ -114,7 +115,13 @@
                         @endif
 
                         <div class="mt-8 border-t pt-6">
-                            <h2 class="text-xl font-semibold">Candidate Details</h2>
+                            <div class="flex items-center justify-between">
+                                <h2 class="text-xl font-semibold">Candidate Details</h2>
+                                <a href="{{ route('candidates.resume.view', $candidate) }}" target="_blank" class="p-2 bg-gray-600 hover:bg-gray-700 text-white rounded">
+                                    Download Resume
+                                </a>
+                            </div>
+
                             <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <h3 class="text-lg font-medium">Contact Information</h3>
@@ -176,18 +183,132 @@
                                             <dt class="w-32 text-sm font-medium text-gray-500">Match Score:</dt>
                                             <dd class="text-sm text-gray-900">{{ $candidate->match_score_percentage }}</dd>
                                         </div>
-                                        <div class="flex">
-                                            <dt class="w-32 text-sm font-medium text-gray-500">Resume:</dt>
-                                            <dd class="text-sm text-gray-900">
-                                                <a href="{{ route('candidates.resume.view', $candidate) }}" target="_blank" class="text-indigo-600 hover:text-indigo-900">
-                                                    View Resume
-                                                </a>
-                                            </dd>
-                                        </div>
                                     </dl>
                                 </div>
                             </div>
                         </div>
+
+                        @if($profile->extracted_data)
+                            <div class="mt-8 border-t pt-6">
+                                <h2 class="text-xl font-semibold">Resume Insights</h2>
+                                <div class="mt-4 space-y-6">
+                                    @if(!empty($profile->extracted_data['education']))
+                                        <div>
+                                            <h3 class="text-lg font-medium">Education</h3>
+                                            <ul class="mt-2 space-y-2 list-disc pl-5 text-sm">
+                                                @foreach($profile->extracted_data['education'] as $edu)
+                                                    <li>
+                                                        <span class="font-medium">{{ $edu['degree'] ?? '' }}</span>
+                                                        @if(!empty($edu['institution']))
+                                                            , {{ $edu['institution'] }}
+                                                        @endif
+                                                        @if(!empty($edu['date_range']))
+                                                            <span class="text-gray-500"> ({{ $edu['date_range'] }})</span>
+                                                        @endif
+                                                        @if(!empty($edu['highlights']))
+                                                            <span class="text-gray-500"> - {{ $edu['highlights'] }}</span>
+                                                        @endif
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    @endif
+
+                                    @if(!empty($profile->extracted_data['experience']))
+                                        <div>
+                                            <h3 class="text-lg font-medium">Experience</h3>
+                                            <ul class="mt-2 space-y-2 list-disc pl-5 text-sm">
+                                                @foreach($profile->extracted_data['experience'] as $exp)
+                                                    <li>
+                                                        <span class="font-medium">{{ $exp['title'] ?? '' }}</span>
+                                                        @if(!empty($exp['company']))
+                                                            at {{ $exp['company'] }}
+                                                        @endif
+                                                        @if(!empty($exp['date_range']))
+                                                            <span class="text-gray-500"> ({{ $exp['date_range'] }})</span>
+                                                        @endif
+                                                        @if(!empty($exp['responsibilities']))
+                                                            <ul class="list-disc pl-5 mt-1">
+                                                                @foreach($exp['responsibilities'] as $resp)
+                                                                    <li>{{ $resp }}</li>
+                                                                @endforeach
+                                                            </ul>
+                                                        @endif
+                                                        @if(!empty($exp['achievements']))
+                                                            <ul class="list-disc pl-5 mt-1">
+                                                                @foreach($exp['achievements'] as $ach)
+                                                                    <li>{{ $ach }}</li>
+                                                                @endforeach
+                                                            </ul>
+                                                        @endif
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    @endif
+
+                                    @if(!empty($profile->extracted_data['skills']))
+                                        <div>
+                                            <h3 class="text-lg font-medium">Skills</h3>
+                                            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                                @if (is_array($profile->extracted_data['skills']))
+                                                    @foreach($profile->extracted_data['skills'] as $category => $skills)
+                                                        @if(!empty($skills))
+                                                            <div>
+                                                                <h4 class="font-semibold capitalize">{{ str_replace('_', ' ', $category) }}</h4>
+                                                                <ul class="list-disc pl-5 space-y-1 mt-1">
+                                                                    @php
+                                                                        $skills = is_array($skills) ? $skills : explode(',', $skills);
+                                                                    @endphp    
+
+                                                                    @foreach($skills as $skill)
+                                                                        <li>{{ $skill }}</li>
+                                                                    @endforeach
+                                                                </ul>
+                                                            </div>
+                                                        @endif
+                                                    @endforeach
+                                                @else
+                                                    <div>
+                                                        <h4 class="font-semibold">Skills</h4>
+                                                        <ul class="list-disc pl-5 space-y-1 mt-1">
+                                                            @foreach($profile->extracted_data['skills'] as $skill)
+                                                                <li>{{ $skill }}</li>
+                                                            @endforeach
+                                                        </ul>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                    @if(!empty($profile->extracted_data['additional_info']))
+                                        <div>
+                                            <h3 class="text-lg font-medium">Additional Information</h3>
+                                            <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                                @foreach($profile->extracted_data['additional_info'] as $category => $items)
+                                                    @if(!empty($items))
+                                                        <div>
+                                                            <h4 class="font-semibold capitalize">{{ str_replace('_', ' ', $category) }}</h4>
+                                                            <ul class="list-disc pl-5 space-y-1 mt-1">
+                                                                @php
+                                                                    $items = is_array($items) ? $items : explode(',', $items);
+                                                                @endphp
+                                                                @foreach($items as $item)
+                                                                    <li>{{ $item }}</li>
+                                                                @endforeach
+                                                            </ul>
+                                                        </div>
+                                                    @endif
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
+
+
                     </div>
                 </div>
             </div>

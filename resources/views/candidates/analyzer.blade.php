@@ -452,10 +452,11 @@
                 
                 // Add event listener to the remove button
                 const removeBtn = requirementItem.querySelector('.remove-requirement-btn');
-                attachRemoveRequirementListener(removeBtn);
-            }
 
-            const requirementDestroyUrl = '{{ route('projects.requirements.destroy', [$project, 0]) }}';
+                removeBtn.addEventListener('click', function() {
+                    attachRemoveRequirementListener(removeBtn);
+                });
+            }
 
             function attachRemoveRequirementListener(button) {
                 button.addEventListener('click', function() {
@@ -464,7 +465,8 @@
                     const name = requirementItem.querySelector('.font-medium').textContent.trim();
 
                     if (confirm(`Are you sure you want to remove the requirement: ${name}?`)) {
-                        fetch(requirementDestroyUrl.replace('/0', '/' + id), {
+                        fetch('{{ url('projects/'.$project->id.'/requirements') }}/' + id, {
+
                             method: 'DELETE',
                             headers: {
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}',
@@ -499,7 +501,8 @@
                     }
                 });
             }
-            
+
+
             // Helper function to get badge class based on requirement type
             function getTypeBadgeClass(type) {
                 const badgeClasses = {
