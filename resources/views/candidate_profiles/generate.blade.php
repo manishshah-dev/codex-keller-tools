@@ -42,7 +42,7 @@
                                 </div>
                                 <div class="ml-3">
                                     <p class="text-sm text-blue-700">
-                                        Use AI to generate content for your profile. You can generate a full profile, just the headings, or content for existing headings.
+                                        Use AI to generate content for your profile. You can generate a full profile or content for existing headings.
                                     </p>
                                 </div>
                             </div>
@@ -147,7 +147,7 @@
                                                      <option value="{{ $setting->id }}"
                                                              data-provider="{{ $setting->provider }}"
                                                              data-models='@json($setting->models ?? [])'
-                                                             {{ $profile->ai_provider == $setting->provider ? 'selected' : '' }}>
+                                                    >
                                                          {{ $setting->name }} ({{ ucfirst($setting->provider) }})
                                                      </option>
                                                 @endforeach
@@ -158,6 +158,7 @@
                                             <label for="ai_model" class="block text-sm font-medium text-gray-700">AI Model</label>
                                             <select id="ai_model" name="ai_model" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                                                 <!-- Will be populated by JavaScript -->
+                                                <option value="">Select AI Setting first</option>
                                             </select>
                                         </div>
 
@@ -243,15 +244,7 @@
                                                 </div>
                                             </div>
                                             
-                                            <div class="relative flex items-start">
-                                                <div class="flex items-center h-5">
-                                                    <input id="generation_type_headings" name="generation_type" type="radio" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300" value="headings">
-                                                </div>
-                                                <div class="ml-3 text-sm">
-                                                    <label for="generation_type_headings" class="font-medium text-gray-700">Generate Headings Only</label>
-                                                    <p class="text-gray-500">Generate only the headings structure. This will replace any existing headings but keep the summary.</p>
-                                                </div>
-                                            </div>
+                                            <!-- "Generate Headings Only" option removed as it was not functioning correctly and deemed unnecessary -->
                                             
                                             <div class="relative flex items-start">
                                                 <div class="flex items-center h-5">
@@ -266,49 +259,7 @@
                                     </div>
                                 </div>
 
-                                <!-- Custom Headings (shown only when "Generate Headings Only" is selected) -->
-                                <div id="custom_headings_section" class="hidden">
-                                    <h3 class="text-lg font-medium leading-6 text-gray-900">Custom Headings</h3>
-                                    <p class="mt-1 text-sm text-gray-500">
-                                        Optionally specify custom headings instead of using AI-generated ones.
-                                    </p>
-                                    <div class="mt-4">
-                                        <div id="custom_headings_container" class="space-y-2">
-                                            @if(count($customHeadings) > 0)
-                                                <div class="text-sm text-gray-700 mb-2">Select from existing heading templates:</div>
-                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                    @foreach($customHeadings as $heading)
-                                                        <div class="flex items-center">
-                                                            <input type="checkbox" id="heading_{{ $heading->id }}" name="custom_headings[]" value="{{ $heading->name }}" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
-                                                            <label for="heading_{{ $heading->id }}" class="ml-2 block text-sm text-gray-900">
-                                                                {{ $heading->name }}
-                                                            </label>
-                                                        </div>
-                                                    @endforeach
-                                                </div>
-                                                <div class="border-t border-gray-200 my-4"></div>
-                                            @endif
-                                            
-                                            <div class="text-sm text-gray-700 mb-2">Or add custom headings:</div>
-                                            <div id="custom_heading_inputs" class="space-y-2">
-                                                <div class="flex items-center space-x-2">
-                                                    <input type="text" name="custom_headings[]" class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md" placeholder="Enter custom heading">
-                                                    <button type="button" class="remove-heading-btn text-red-600 hover:text-red-800 hidden">
-                                                        <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                                        </svg>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <button type="button" id="add_heading_btn" class="mt-2 inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                                <svg class="-ml-0.5 mr-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
-                                                </svg>
-                                                Add Heading
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
+                                <!-- Custom Headings section removed as it was only used with the "Generate Headings Only" option -->
 
                                 <!-- Submit Button -->
                                 <div class="pt-5 border-t border-gray-200">
@@ -345,10 +296,7 @@
             const aiSettingId = document.getElementById('ai_setting_id');
             const aiModel = document.getElementById('ai_model');
             const aiPromptId = document.getElementById('ai_prompt_id');
-            const generationTypeHeadings = document.getElementById('generation_type_headings');
-            const customHeadingsSection = document.getElementById('custom_headings_section');
-            const addHeadingBtn = document.getElementById('add_heading_btn');
-            const customHeadingInputs = document.getElementById('custom_heading_inputs');
+            // References to removed elements deleted
             
             // Function to update model dropdown based on selected setting
             function updateModelDropdown() {
@@ -481,53 +429,7 @@
                 });
             }
             
-            // Function to toggle custom headings section
-            function toggleCustomHeadingsSection() {
-                if (generationTypeHeadings.checked) {
-                    customHeadingsSection.classList.remove('hidden');
-                } else {
-                    customHeadingsSection.classList.add('hidden');
-                }
-            }
-            
-            // Function to add a new custom heading input
-            function addCustomHeadingInput() {
-                const headingInputs = customHeadingInputs.querySelectorAll('input[type="text"]');
-                const lastInput = headingInputs[headingInputs.length - 1];
-                
-                // Create a new input row
-                const newInputRow = document.createElement('div');
-                newInputRow.className = 'flex items-center space-x-2';
-                newInputRow.innerHTML = `
-                    <input type="text" name="custom_headings[]" class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md" placeholder="Enter custom heading">
-                    <button type="button" class="remove-heading-btn text-red-600 hover:text-red-800">
-                        <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                `;
-                
-                customHeadingInputs.appendChild(newInputRow);
-                
-                // Show remove button for the first input if we now have multiple inputs
-                if (headingInputs.length === 1) {
-                    const firstRemoveBtn = customHeadingInputs.querySelector('.remove-heading-btn');
-                    firstRemoveBtn.classList.remove('hidden');
-                }
-                
-                // Add event listener to the new remove button
-                const newRemoveBtn = newInputRow.querySelector('.remove-heading-btn');
-                newRemoveBtn.addEventListener('click', function() {
-                    newInputRow.remove();
-                    
-                    // Hide remove button for the first input if we now have only one input
-                    const remainingInputs = customHeadingInputs.querySelectorAll('input[type="text"]');
-                    if (remainingInputs.length === 1) {
-                        const firstRemoveBtn = customHeadingInputs.querySelector('.remove-heading-btn');
-                        firstRemoveBtn.classList.add('hidden');
-                    }
-                });
-            }
+            // Functions related to custom headings section removed
             
             // Update models when setting changes
             // aiSettingId.addEventListener('change', updateModelDropdown);
@@ -547,26 +449,13 @@
             // Add custom heading input when button is clicked
             addHeadingBtn.addEventListener('click', addCustomHeadingInput);
             
-            // Add event listener to existing remove buttons
-            document.querySelectorAll('.remove-heading-btn').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    btn.closest('.flex').remove();
-                    
-                    // Hide remove button for the first input if we now have only one input
-                    const remainingInputs = customHeadingInputs.querySelectorAll('input[type="text"]');
-                    if (remainingInputs.length === 1) {
-                        const firstRemoveBtn = customHeadingInputs.querySelector('.remove-heading-btn');
-                        firstRemoveBtn.classList.add('hidden');
-                    }
-                });
-            });
+            // Event listeners for custom headings removed
             
             // Initialize model dropdown and prompts dropdown
             updateModelDropdown();
             updatePromptsDropdown();
             
-            // Initialize custom headings section
-            toggleCustomHeadingsSection();
+            // Custom headings initialization removed
         });
     </script>
 </x-app-layout>

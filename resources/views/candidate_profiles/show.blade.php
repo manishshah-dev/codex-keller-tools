@@ -28,6 +28,14 @@
                     </svg>
                     Word
                 </a>
+
+                <a href="{{ route('projects.candidates.profiles.submissions.create', [$project, $candidate, $profile]) }}" class="inline-flex items-center px-3 py-2 border border-indigo-600 text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <svg class="-ml-0.5 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm9 2H8v2H6v2h2v2h2v-2h2V9h-2V7z" />
+                    </svg>
+                    Submit to Client
+                </a>
+
                 @if(!$profile->is_finalized)
                     <a href="{{ route('projects.candidates.profiles.edit', [$project, $candidate, $profile]) }}" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                         <svg class="-ml-0.5 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">

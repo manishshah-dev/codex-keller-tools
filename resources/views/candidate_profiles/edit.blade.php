@@ -55,6 +55,7 @@
                     <form action="{{ route('projects.candidates.profiles.update', [$project, $candidate, $profile]) }}" method="POST">
                         @csrf
                         @method('PUT')
+                        <input type="hidden" name="update_headings" value="1">
 
                         <div class="space-y-8">
                             <!-- Basic Information -->

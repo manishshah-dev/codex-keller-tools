@@ -130,18 +130,6 @@ class Candidate extends Model
     }
 
     /**
-     * Get the candidate's resume URL.
-     */
-    public function getResumeUrlAttribute(): ?string
-    {
-        if ($this->resume_path) {
-            return asset('storage/' . $this->resume_path);
-        }
-        
-        return null;
-    }
-
-    /**
      * Get the candidate's status badge class.
      */
     public function getStatusBadgeClassAttribute(): string
@@ -154,6 +142,9 @@ class Candidate extends Model
             'hired' => 'bg-green-500 text-white',
             'rejected' => 'bg-red-100 text-red-800',
             'withdrawn' => 'bg-gray-100 text-gray-800',
+            'analyzed' => 'bg-green-100 text-green-800',
+            'analyzing' => 'bg-yellow-100 text-yellow-800',
+            'analysis_failed' => 'bg-red-100 text-red-800',
             default => 'bg-gray-100 text-gray-800',
         };
     }

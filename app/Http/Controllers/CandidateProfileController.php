@@ -11,6 +11,7 @@ use App\Services\AIService;
 use App\Services\CandidateProfileExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -222,7 +223,7 @@ class CandidateProfileController extends Controller
             'summary' => 'nullable|string',
             'headings' => 'nullable|array',
             'headings.*.title' => 'required|string|max:255',
-            'headings.*.content' => 'required|array',
+            'headings.*.content' => 'nullable|array',
             'headings.*.order' => 'nullable|integer',
             'extracted_data' => 'nullable|array',
             'finalize' => 'nullable|boolean',
@@ -260,23 +261,23 @@ class CandidateProfileController extends Controller
             $profile->update(['extracted_data' => $extractedData]);
         }
         
-        // Update headings
-        if (isset($validated['headings'])) {
-            // If headings are provided, map them
-            $headings = collect($validated['headings'])->map(function ($heading, $index) {
-                return [
-                    'title' => $heading['title'],
-                    'content' => $heading['content'],
-                    'order' => $heading['order'] ?? $index,
-                ];
-            })->toArray();
-            
-            $profile->update(['headings' => $headings]);
-        } else if ($request->has('headings')) {
-            // If headings field was submitted but is empty, set headings to empty array
-            // This handles the case where all headings were removed in the form
-            $profile->update(['headings' => []]);
-            Log::info('All headings removed from profile', ['profile_id' => $profile->id]);
+        // Check if the form was submitted with the intention to update headings
+        if ($request->has('update_headings')) {
+            if (isset($validated['headings']) && !empty($validated['headings'])) {
+                // If headings are provided and not empty, map them
+                $headings = collect($validated['headings'])->map(function ($heading, $index) {
+                    return [
+                        'title' => $heading['title'],
+                        'content' => $heading['content'] ?? [],
+                        'order' => $heading['order'] ?? $index,
+                    ];
+                })->toArray();
+                
+                $profile->update(['headings' => $headings]);
+            } else {
+                // If no headings or empty headings, explicitly set to empty array
+                $profile->update(['headings' => []]);
+            }
         }
         
         // Handle finalization if requested

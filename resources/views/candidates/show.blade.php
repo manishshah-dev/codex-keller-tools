@@ -10,7 +10,7 @@
                     <a href="{{ route('projects.candidates.index', $project) }}" class="text-indigo-600 hover:text-indigo-900">Back to Candidates</a>
                 </p>
             </div>
-            <div class="flex space-x-2">
+            <div class="flex space-x-2 items-center">
                 <a href="{{ route('projects.candidates.edit', [$project, $candidate]) }}" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded">
                     Edit Candidate
                 </a>
@@ -101,7 +101,7 @@
                                 @if($candidate->resume_path)
                                 <div>
                                     <p class="text-sm text-gray-500">Resume</p>
-                                    <a href="{{ $candidate->resume_url }}" target="_blank" class="text-indigo-600 hover:text-indigo-900">
+                                    <a href="{{ route('candidates.resume.view', $candidate) }}" target="_blank" class="text-indigo-600 hover:text-indigo-900">
                                         Download Resume
                                     </a>
                                 </div>
@@ -119,12 +119,28 @@
                                     </div>
                                 @endif
 
-                                <div class="pt-4">
-                                    <form action="{{ route('candidates.analyze', $candidate) }}" method="POST" onsubmit="return confirm('Analyze this candidate?');">
-                                        @csrf
-                                        <x-primary-button>{{ __('Analyze Candidate') }}</x-primary-button>
-                                    </form>
-                                </div>
+                                <p class="text-md font-bold">Analyze Candidate</p>
+
+                                <form action="{{ route('candidates.analyze', $candidate) }}" method="POST" class="!mt-0 flex items-center flex-col">
+                                    @csrf
+                                    <select id="analyze_ai_setting_id" name="ai_setting_id" class="text-sm border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm" required>
+                                        @foreach($aiSettings as $setting)
+                                            <option value="{{ $setting->id }}" data-provider-type="{{ $setting->provider }}" data-models='@json($setting->models ?? [])'>
+                                                {{ $setting->name }} ({{ ucfirst($setting->provider) }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <select id="analyze_ai_model" name="ai_model" class="text-sm border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm" required disabled>
+                                        <option value="">Select AI Setting first</option>
+                                    </select>
+                                    <select id="analyze_ai_prompt_id" name="ai_prompt_id" class="text-sm border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm" disabled>
+                                        <option value="">Use Default/Generic Prompt</option>
+                                    </select>
+                                    <button type="submit" class="mt-5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded">
+                                        Analyze Candidate
+                                    </button>
+                                </form>
+
                             </div>
                         </div>
                     </div>
@@ -447,6 +463,82 @@
                 });
             }
         @endif
+        
+        // Initialize Select2 for the dropdowns
+        const settingSelect = document.getElementById('analyze_ai_setting_id');
+        const modelSelect = document.getElementById('analyze_ai_model');
+        const promptSelect = document.getElementById('analyze_ai_prompt_id');
+        const providerModelsMap = @json($providerModels ?? []);
+        const allPrompts = @json($prompts ?? []);
+
+        function updateModelsDropdown() {
+            const opt = settingSelect.options[settingSelect.selectedIndex];
+            if (!opt || !opt.value) {
+                modelSelect.innerHTML = '<option value="">Select AI Setting first</option>';
+                $(modelSelect).prop('disabled', true).trigger('change');
+                updatePromptsDropdown();
+                return;
+            }
+            const provider = opt.dataset.providerType;
+            let enabledModels = [];
+            try {
+                enabledModels = JSON.parse(opt.dataset.models || '[]');
+            } catch (e) {
+                enabledModels = [];
+            }
+            const allModels = providerModelsMap[provider] || [];
+            modelSelect.innerHTML = '';
+            let hasValid = false;
+            allModels.forEach(m => {
+                const o = document.createElement('option');
+                o.value = m;
+                o.textContent = m;
+                if (enabledModels.includes(m)) {
+                    o.selected = true;
+                }
+                hasValid = true;
+                modelSelect.appendChild(o);
+            });
+
+            if (!hasValid) {
+                const o = document.createElement('option');
+                o.value = '';
+                o.textContent = 'No enabled models found';
+                modelSelect.appendChild(o);
+                $(modelSelect).prop('disabled', true);
+            } else {
+                $(modelSelect).prop('disabled', false);
+            }
+            $(modelSelect).trigger('change');
+            updatePromptsDropdown();
+        }
+
+        function updatePromptsDropdown() {
+            const opt = settingSelect.options[settingSelect.selectedIndex];
+            const provider = opt ? opt.dataset.providerType : null;
+            const model = modelSelect.value;
+            const filtered = allPrompts.filter(p => (!p.provider || p.provider === provider) && (!p.model || p.model === model));
+            promptSelect.innerHTML = '<option value="">Use Default/Generic Prompt</option>';
+            filtered.forEach(p => {
+                const o = document.createElement('option');
+                o.value = p.id;
+                o.textContent = p.name + (p.is_default ? ' (Default)' : '');
+                if (p.is_default) o.selected = true;
+                promptSelect.appendChild(o);
+            });
+            $(promptSelect).prop('disabled', $(modelSelect).prop('disabled')).trigger('change');
+        }
+
+        if (settingSelect) {
+            $('#analyze_ai_setting_id').on('change', updateModelsDropdown);
+            $('#analyze_ai_model').on('change', updatePromptsDropdown);
+            updateModelsDropdown();
+        }
+
+        $('#analyze_ai_setting_id').select2({ width: '100%' });
+        $('#analyze_ai_model').select2({ width: '100%' });
+        $('#analyze_ai_prompt_id').select2({ width: '100%' });
     });
+
 </script>
 </x-app-layout>

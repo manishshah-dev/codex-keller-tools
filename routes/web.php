@@ -17,6 +17,7 @@ use App\Http\Controllers\SearchStringController;
 use App\Http\Controllers\CandidateController;
 use App\Http\Controllers\CandidateProfileController;
 use App\Http\Controllers\TrashController;
+use App\Http\Controllers\CandidateProfileSubmissionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -119,6 +120,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/projects/{project}/candidates/{candidate}/profiles/{profile}/generate', [CandidateProfileController::class, 'showGenerate'])->name('projects.candidates.profiles.show-generate');
     Route::post('/projects/{project}/candidates/{candidate}/profiles/{profile}/generate', [CandidateProfileController::class, 'generate'])->name('projects.candidates.profiles.generate');
     Route::get('/projects/{project}/candidates/{candidate}/profiles/{profile}/export', [CandidateProfileController::class, 'export'])->name('projects.candidates.profiles.export');
+    
+    // Candidate Profile Submissions
+    Route::get('/projects/{project}/candidates/{candidate}/profiles/{profile}/create', [CandidateProfileSubmissionController::class, 'create'])->name('projects.candidates.profiles.submissions.create');
+    Route::get('/projects/{project}/candidates/{candidate}/profiles/{profile}/submissions', [CandidateProfileSubmissionController::class, 'show'])->name('projects.candidates.profiles.submissions.show');
+    Route::post('/projects/{project}/candidates/{candidate}/profiles/{profile}/submissions', [CandidateProfileSubmissionController::class, 'store'])->name('projects.candidates.profiles.submissions.store');
     
     // Keywords
     Route::resource('projects.keywords', KeywordController::class)->shallow();

@@ -194,9 +194,8 @@ class CandidateController extends Controller
      * @return \Illuminate\View\View
      */
     // Removed Project $project due to shallow routing
-    public function show(Project $project, Candidate $candidate): View
+    public function show(Project $project, Candidate $candidate, ModelRegistryService $modelRegistryService): View
     {
-        // Verify that the candidate belongs to the project
         if ($candidate->project_id !== $project->id) {
             abort(404, 'Candidate not found in this project');
         }
@@ -205,9 +204,11 @@ class CandidateController extends Controller
         $requirements = $project->activeRequirements()->get();
         $chatMessages = $candidate->chatMessages()->orderBy('created_at')->get();
 
-        // dd($candidate->analysis_details); // Debugging line, remove in production
+        $aiSettings = AISetting::active()->get();
+        $prompts = AIPrompt::where('feature', 'cv_analyzer')->orderBy('name')->get();
+        $providerModels = $modelRegistryService->getModels();
 
-        return view('candidates.show', compact('project', 'candidate', 'requirements', 'chatMessages'));
+        return view('candidates.show', compact('project', 'candidate', 'requirements', 'chatMessages', 'aiSettings', 'prompts', 'providerModels'));
     }
     
     /**
@@ -218,7 +219,7 @@ class CandidateController extends Controller
      * @param  \App\Models\Candidate  $candidate
      * @return \Illuminate\View\View
      */
-    public function projectShow(Project $project, Candidate $candidate): View
+    public function projectShow(Project $project, Candidate $candidate, ModelRegistryService $modelRegistryService): View
     {
         $this->authorize('view', $project);
         
@@ -229,9 +230,12 @@ class CandidateController extends Controller
         
         $requirements = $project->activeRequirements()->get();
         $chatMessages = $candidate->chatMessages()->orderBy('created_at')->get();
-        
-        return view('candidates.show', compact('project', 'candidate', 'requirements', 'chatMessages'));
-    }
+
+        $aiSettings = AISetting::active()->get();
+        $prompts = AIPrompt::where('feature', 'cv_analyzer')->orderBy('name')->get();
+        $providerModels = $modelRegistryService->getModels();
+
+        return view('candidates.show', compact('project', 'candidate', 'requirements', 'chatMessages', 'aiSettings', 'prompts', 'providerModels'));    }
     
     /**
      * Show the form for editing the specified candidate.
@@ -825,9 +829,9 @@ class CandidateController extends Controller
 
         $project = $candidate->project;
         if (!$project) {
-             $candidate->status = 'analysis_failed';
-             $candidate->save();
-             return;
+            $candidate->status = 'analysis_failed';
+            $candidate->save();
+            return;
         }
 
         $requirementsText = $project->requirements->map(function ($req) {
@@ -1174,31 +1178,41 @@ class CandidateController extends Controller
      * @param  \App\Models\Candidate  $candidate
      * @return \Illuminate\Http\RedirectResponse
      */
-    public function analyze(Candidate $candidate): RedirectResponse
+    public function analyze(Request $request, Candidate $candidate): RedirectResponse
     {
         $project = $candidate->project;
         $this->authorize('update', $project);
         
+         $validated = $request->validate([
+            'ai_setting_id' => 'required|exists:ai_settings,id',
+            'ai_model' => 'required|string',
+            'ai_prompt_id' => 'nullable|exists:ai_prompts,id',
+        ]);
+
+        $setting = AISetting::findOrFail($validated['ai_setting_id']);
+        if (!in_array($validated['ai_model'], $setting->models ?? [])) {
+            return back()->withErrors(['ai_model' => 'The selected model is not valid for the chosen AI setting.'])->withInput();
+        }
+
+        $promptId = $validated['ai_prompt_id'] ?? null;
+        if ($promptId) {
+            $prompt = AIPrompt::find($promptId);
+            if (!$prompt || ($prompt->provider && $prompt->provider !== $setting->provider) || ($prompt->model && $prompt->model !== $validated['ai_model'])) {
+                return back()->withErrors(['ai_prompt_id' => 'The selected prompt is not compatible with the chosen AI setting or model.'])->withInput();
+            }
+        }
+
         try {
-            // Get default AI setting for CV analysis
-            $aiSetting = AISetting::active()
-                ->first();
-                
-            if (!$aiSetting) {
-                return redirect()->back()->with('error', 'No active AI setting found for CV analysis.');
+            $this->analyzeCandidate($candidate, $setting, $validated['ai_model'], $promptId);
+
+            $candidate->refresh();
+            if ($candidate->status === 'analyzed') {
+                return redirect()->back()->with('success', 'Candidate analyzed successfully.');
             }
-            
-            // Get default model
-            $model = $aiSetting->default_model ?? $aiSetting->models[0] ?? null;
-            
-            if (!$model) {
-                return redirect()->back()->with('error', 'No models configured for the selected AI setting.');
-            }
-            
-            // Analyze the candidate
-            $this->analyzeCandidate($candidate, $aiSetting, $model);
-            
-            return redirect()->back()->with('success', 'Candidate analyzed successfully.');
+
+            return redirect()->back()->with('error', 'Candidate analysis failed.');
+
+            // return redirect()->back()->with('success', 'Candidate analyzed successfully.');
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Failed to analyze candidate: ' . $e->getMessage());
         }
