@@ -24,6 +24,7 @@
                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Recipient</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sent By</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Candidate</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                                 </tr>
                             </thead>
@@ -33,14 +34,36 @@
                                         <td class="px-4 py-2">{{ $submission->client_email }}</td>
                                         <td class="px-4 py-2">{{ $submission->subject }}</td>
                                         <td class="px-4 py-2">{{ $submission->user->name }}</td>
-                                        <td class="px-4 py-2">{{ $submission->created_at->format('M d, Y H:i') }}</td>
+                                        <td class="px-4 py-2">
+                                            <a href="{{ route('projects.candidates.profiles.show', [$submission->project_id, $submission->candidate_id, $submission->candidate_profile_id]) }}" class="text-blue-600 hover:underline">
+                                                {{ $submission->candidate->full_name }}
+                                            </a>
+                                        </td>
+                                        <td class="px-4 py-2">
+                                            <span class="local-datetime" data-datetime="{{ $submission->created_at->toIso8601String() }}">
+                                                {{ $submission->created_at->format('M d, Y H:i') }}
+                                            </span>
+                                        </td>
                                     </tr>
                                 @endforeach
                             </tbody>
                         </table>
+                        <div class="mt-4">
+                            {{ $submissions->links() }}
+                        </div>
                     @endif
                 </div>
             </div>
         </div>
     </div>
+
+<script>
+    document.querySelectorAll('.local-datetime').forEach(function(el) {
+        const utcDate = el.getAttribute('data-datetime');
+        if (utcDate) {
+            const localDate = new Date(utcDate);
+            el.innerHTML = localDate.toLocaleString();
+        }
+    });
+</script>
 </x-app-layout>

@@ -68,6 +68,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/candidates/{candidate}/analyze', [CandidateController::class, 'analyze'])->name('candidates.analyze');
     Route::post('/projects/{project}/candidates/analyze-all', [CandidateController::class, 'analyzeAll'])->name('projects.candidates.analyzeAll'); // Add route for batch analysis
     Route::get('/candidates/{candidate}/resume/view', [CandidateController::class, 'viewResume'])->name('candidates.resume.view'); // Route for viewing resume
+    Route::get('/candidates/{candidate}/resume/download', [CandidateController::class, 'downloadResume'])->name('candidates.resume.download'); // Route for downloading resume
     
     // Company Research
     Route::get('/projects/{project}/company-research', [CompanyResearchController::class, 'show'])->name('projects.company_research.show');
@@ -123,7 +124,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // Candidate Profile Submissions
     Route::get('/projects/{project}/candidates/{candidate}/profiles/{profile}/create', [CandidateProfileSubmissionController::class, 'create'])->name('projects.candidates.profiles.submissions.create');
-    Route::get('/projects/{project}/candidates/{candidate}/profiles/{profile}/submissions', [CandidateProfileSubmissionController::class, 'show'])->name('projects.candidates.profiles.submissions.show');
+    Route::get('/mail-logs', [CandidateProfileSubmissionController::class, 'show'])->name('projects.candidates.profiles.submissions.show');
     Route::post('/projects/{project}/candidates/{candidate}/profiles/{profile}/submissions', [CandidateProfileSubmissionController::class, 'store'])->name('projects.candidates.profiles.submissions.store');
     
     // Keywords

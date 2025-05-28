@@ -15,19 +15,16 @@ use Illuminate\View\View;
 
 class CandidateProfileSubmissionController extends Controller
 {
-    public function show(Project $project, Candidate $candidate, CandidateProfile $profile): View
+    public function show(CandidateProfile $profile): View
     {
-        $this->authorize('view', $project);
-        if ($candidate->project_id !== $project->id || $profile->candidate_id !== $candidate->id) {
-            abort(404);
-        }
+        // $this->authorize('view', $project);
 
-        $submissions = CandidateProfileSubmission::where('candidate_profile_id', $profile->id)
-            ->with('user')
+        $submissions = CandidateProfileSubmission::with('user')
             ->latest()
-            ->get();
+            ->paginate(20);
 
-        return view('candidate_profile_submissions.show', compact('project', 'candidate', 'profile', 'submissions'));
+
+        return view('candidate_profile_submissions.show', compact('profile','submissions'));
     }
 
     
@@ -43,7 +40,9 @@ class CandidateProfileSubmissionController extends Controller
             abort(404, 'Profile not found for this candidate and project');
         }
 
-        return view('candidate_profile_submissions.create', compact('project', 'candidate', 'profile'));
+        $template = \App\Mail\CandidateProfileSubmissionMail::defaultTemplate();
+
+        return view('candidate_profile_submissions.create', compact('project', 'candidate', 'profile', 'template'));
     }
 
     /**
@@ -61,8 +60,10 @@ class CandidateProfileSubmissionController extends Controller
 
         $data = $request->validate([
             'client_email' => 'required|email',
+            'client_name' => 'nullable|string|max:255',
             'subject' => 'nullable|string|max:255',
-            'message' => 'nullable|string',
+            'email_body' => 'required|string',
+            'attach_cv' => 'sometimes|boolean',
         ]);
 
         CandidateProfileSubmission::create([
@@ -71,33 +72,43 @@ class CandidateProfileSubmissionController extends Controller
             'project_id' => $project->id,
             'user_id' => Auth::id(),
             'client_email' => $data['client_email'],
+            'client_name' => $data['client_name'] ?? '',
             'subject' => $data['subject'],
-            'message' => $data['message'] ?? '',
+            'message' => $data['email_body'] ?? '',
         ]);
 
-        Mail::to($data['client_email'])->send(new CandidateProfileSubmissionMail($project, $candidate, $profile, $data['message'] ?? ''));
+        // Mail::to($data['client_email'])->send(new CandidateProfileSubmissionMail($project, $candidate, $profile, $data['message'] ?? ''));
 
-        $cv_available = true;
+        Mail::to($data['client_email'])->send(
+            new CandidateProfileSubmissionMail(
+                $project,
+                $candidate,
+                $profile,
+                $data['subject'],
+                $data['email_body'],
+                (bool)($data['attach_cv'] ?? false)
+            )
+        );
 
-        if (!$candidate->resume_path) {
-            $cv_available = false;
-        }
-        
-        $resumePath = $candidate->resume_path;
-        $fullPath = storage_path('app/private/' . $resumePath);
-        
-        if (!file_exists($fullPath)) {
-            $cv_available = false;
+        $cv_available = false;
+
+        if ($candidate->resume_path && isset($data['attach_cv']) && $data['attach_cv']) {
+            $resumePath = basename((string) $candidate->resume_path);
+            $fullPath = storage_path('app/private/' . $resumePath);
+            
+            if (file_exists($fullPath)) {
+                $cv_available = true; 
+            }
         }
 
         if($cv_available){
             return redirect()
-                ->route('projects.candidates.profiles.show', [$project, $candidate, $profile])
+                ->route('projects.candidates.profiles.submissions.show')
                 ->with('success', 'Profile submitted to client successfully.');
         }else{
             return redirect()
-                ->route('projects.candidates.profiles.show', [$project, $candidate, $profile])
-                ->with('warning', 'Profile submitted to client successfully. But CV is not available.');
+                ->route('projects.candidates.profiles.submissions.show')
+                ->with('warning', 'Profile submitted to client successfully. CV was not attached.');
         }
     }
 }

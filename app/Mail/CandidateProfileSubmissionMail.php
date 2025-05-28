@@ -12,6 +12,8 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Mail\Mailables\Attachment;
+use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\HtmlString;
 
 class CandidateProfileSubmissionMail extends Mailable
 {
@@ -20,14 +22,30 @@ class CandidateProfileSubmissionMail extends Mailable
     public Project $project;
     public Candidate $candidate;
     public CandidateProfile $profile;
-    public string $messageText;
+    public string $mail_subject;
+    public ?string $emailBody = null;
+    public bool $attachCv = true;
 
-    public function __construct(Project $project, Candidate $candidate, CandidateProfile $profile, string $messageText)
+    public function __construct(Project $project, Candidate $candidate, CandidateProfile $profile, string $mail_subject, ?string $emailBody = null, bool $attachCv = true)
     {
         $this->project = $project;
         $this->candidate = $candidate;
         $this->profile = $profile;
-        $this->messageText = $messageText;
+        $this->mail_subject = $mail_subject;
+        $this->emailBody = $emailBody;
+        $this->attachCv = $attachCv;
+    }
+
+    public static function defaultTemplate(): string
+    {
+        return <<<'TEMPLATE'
+<h2>{{ profile_title }}</h2>
+
+<div style="margin: 20px 0;">
+{{ profile }}
+</div>
+
+TEMPLATE;
     }
 
 
@@ -37,7 +55,7 @@ class CandidateProfileSubmissionMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Candidate Profile Submission: ' . $this->candidate->full_name,
+            subject: $this->mail_subject ?? 'Candidate Profile Submission: ' . $this->candidate->full_name,
         );
     }
 
@@ -46,8 +64,29 @@ class CandidateProfileSubmissionMail extends Mailable
      */
     public function content(): Content
     {
+        $template = $this->emailBody ?? self::defaultTemplate();
+        
+        // Get the profile HTML
+        $profileHtml = view('emails.partials.profile', ['profile' => $this->profile])->render();
+        
+        // Replace placeholders in the template
+        $html = $template;
+        $html = str_replace('{{ candidate_name }}', $this->candidate->full_name, $html);
+        $html = str_replace('{{ profile_title }}', $this->profile->title, $html);
+        $html = str_replace('{{ profile }}', $profileHtml, $html);
+
+        // return new Content(
+        //     view: 'emails.candidate_profile_submission',
+        //     with: [
+        //         'body' => $html
+        //     ]
+        // );
+
         return new Content(
             markdown: 'emails.candidate_profile_submission',
+            with: [
+                'emailContentHtml' => $html,
+            ],
         );
     }
 
@@ -58,7 +97,7 @@ class CandidateProfileSubmissionMail extends Mailable
      */
     public function attachments(): array
     {
-        if (!$this->candidate->resume_path) {
+        if (!$this->attachCv || !$this->candidate->resume_path) {
             return [];
         }
         

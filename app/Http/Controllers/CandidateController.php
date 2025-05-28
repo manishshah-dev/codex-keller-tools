@@ -1173,6 +1173,29 @@ class CandidateController extends Controller
     }
 
     /**
+     * Download the resume file.
+     *
+     * @param  \App\Models\Candidate  $candidate
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse|\Illuminate\Http\RedirectResponse
+     */
+    public function downloadResume(Candidate $candidate)
+    {
+        $project = $candidate->project;
+        $this->authorize('view', $project);
+        
+        if (!$candidate->resume_path || !Storage::disk('private')->exists($candidate->resume_path)) {
+            return redirect()->back()->with('error', 'Resume file not found.');
+        }
+        
+        $filename = basename($candidate->resume_path);
+        $mimeType = Storage::disk('private')->mimeType($candidate->resume_path);
+        
+        return Storage::disk('private')->download($candidate->resume_path, $candidate->full_name . ' - Resume.' . pathinfo($filename, PATHINFO_EXTENSION), [
+            'Content-Type' => $mimeType,
+        ]);
+    }
+
+    /**
      * Analyze a specific candidate.
      *
      * @param  \App\Models\Candidate  $candidate
