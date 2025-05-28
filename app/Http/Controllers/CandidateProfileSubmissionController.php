@@ -62,7 +62,7 @@ class CandidateProfileSubmissionController extends Controller
         $data = $request->validate([
             'client_email' => 'required|email',
             'subject' => 'nullable|string|max:255',
-            'message' => 'nullable|string',
+            'email_content' => 'required|string',
         ]);
 
         CandidateProfileSubmission::create([
@@ -72,10 +72,10 @@ class CandidateProfileSubmissionController extends Controller
             'user_id' => Auth::id(),
             'client_email' => $data['client_email'],
             'subject' => $data['subject'],
-            'message' => $data['message'] ?? '',
+            'email_content' => $data['email_content'],
         ]);
 
-        Mail::to($data['client_email'])->send(new CandidateProfileSubmissionMail($project, $candidate, $profile, $data['message'] ?? ''));
+        Mail::to($data['client_email'])->send(new CandidateProfileSubmissionMail($project, $candidate, $profile, $data['email_content']));
 
         $cv_available = true;
 
@@ -99,5 +99,18 @@ class CandidateProfileSubmissionController extends Controller
                 ->route('projects.candidates.profiles.show', [$project, $candidate, $profile])
                 ->with('warning', 'Profile submitted to client successfully. But CV is not available.');
         }
+    }
+
+    public function getEmailTemplate(Request $request, Project $project, Candidate $candidate, CandidateProfile $profile)
+    {
+        $this->authorize('view', $project); // Assuming 'view' permission is appropriate
+        if ($candidate->project_id !== $project->id || $profile->candidate_id !== $candidate->id) {
+            abort(404);
+        }
+
+        // Get content from the 'message' field passed as a query parameter
+
+        // Return the rendered view content
+        return response(view('candidate_profile_submissions.default_email_content', compact('project', 'candidate', 'profile'))->render());
     }
 }

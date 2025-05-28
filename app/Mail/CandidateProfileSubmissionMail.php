@@ -20,14 +20,14 @@ class CandidateProfileSubmissionMail extends Mailable
     public Project $project;
     public Candidate $candidate;
     public CandidateProfile $profile;
-    public string $messageText;
+    public string $emailContentHtml;
 
-    public function __construct(Project $project, Candidate $candidate, CandidateProfile $profile, string $messageText)
+    public function __construct(Project $project, Candidate $candidate, CandidateProfile $profile, string $emailContentHtml)
     {
         $this->project = $project;
         $this->candidate = $candidate;
         $this->profile = $profile;
-        $this->messageText = $messageText;
+        $this->emailContentHtml = $emailContentHtml;
     }
 
 
@@ -48,6 +48,9 @@ class CandidateProfileSubmissionMail extends Mailable
     {
         return new Content(
             markdown: 'emails.candidate_profile_submission',
+            with: [
+                'emailContentHtml' => $this->emailContentHtml,
+            ],
         );
     }
 

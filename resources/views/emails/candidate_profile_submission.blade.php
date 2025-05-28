@@ -1,5 +1,5 @@
 <x-mail::message>
-    <p>{{ $messageText }}</p>
+    {!! $emailContentHtml !!}
     <h2>{{ $candidate->full_name }} - {{ $profile->title }}</h2>
     <p>{!! nl2br(e($profile->summary)) !!}</p>
     @if($profile->formatted_headings)

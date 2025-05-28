@@ -125,6 +125,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/projects/{project}/candidates/{candidate}/profiles/{profile}/create', [CandidateProfileSubmissionController::class, 'create'])->name('projects.candidates.profiles.submissions.create');
     Route::get('/projects/{project}/candidates/{candidate}/profiles/{profile}/submissions', [CandidateProfileSubmissionController::class, 'show'])->name('projects.candidates.profiles.submissions.show');
     Route::post('/projects/{project}/candidates/{candidate}/profiles/{profile}/submissions', [CandidateProfileSubmissionController::class, 'store'])->name('projects.candidates.profiles.submissions.store');
+    Route::get('/projects/{project}/candidates/{candidate}/profiles/{profile}/submissions/email-template', [CandidateProfileSubmissionController::class, 'getEmailTemplate'])
+        ->name('projects.candidates.profiles.submissions.email_template');
     
     // Keywords
     Route::resource('projects.keywords', KeywordController::class)->shallow();
