@@ -19,7 +19,8 @@ class CandidateProfileSubmissionController extends Controller
     {
         // $this->authorize('view', $project);
 
-        $submissions = CandidateProfileSubmission::with('user')
+        $submissions = CandidateProfileSubmission::where('user_id', Auth::id())
+            ->with('user')
             ->latest()
             ->paginate(20);
 
@@ -103,11 +104,11 @@ class CandidateProfileSubmissionController extends Controller
 
         if($cv_available){
             return redirect()
-                ->route('projects.candidates.profiles.submissions.show')
+                ->route('submissions.show')
                 ->with('success', 'Profile submitted to client successfully.');
         }else{
             return redirect()
-                ->route('projects.candidates.profiles.submissions.show')
+                ->route('submissions.show')
                 ->with('warning', 'Profile submitted to client successfully. CV was not attached.');
         }
     }

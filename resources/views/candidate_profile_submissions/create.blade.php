@@ -3,7 +3,7 @@
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">Submit Profile to Client</h2>
     </x-slot>
 
-    <div class="py-12">
+    <div >
         <div class="max-w-3xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
@@ -38,11 +38,11 @@
                             <input type="email" name="client_email" required class="mt-1 block w-full border-gray-300 rounded-md" />
                             <x-input-error :messages="$errors->get('client_email')" class="mt-2" />
                         </div>
-                        <div class="mb-4">
+                        <!-- <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700">Client Name</label>
                             <input type="text" name="client_name" class="mt-1 block w-full border-gray-300 rounded-md" />
                             <x-input-error :messages="$errors->get('client_name')" class="mt-2" />
-                        </div>
+                        </div> -->
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700">Subject</label>
                             <input type="text" name="subject" class="mt-1 block w-full border-gray-300 rounded-md" value="Candidate Profile Submission: {{{$candidate->full_name}}}" />

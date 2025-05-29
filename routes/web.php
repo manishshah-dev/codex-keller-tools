@@ -20,13 +20,9 @@ use App\Http\Controllers\TrashController;
 use App\Http\Controllers\CandidateProfileSubmissionController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
-
 Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     
     // Projects
     Route::resource('projects', ProjectController::class);
@@ -124,7 +120,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // Candidate Profile Submissions
     Route::get('/projects/{project}/candidates/{candidate}/profiles/{profile}/create', [CandidateProfileSubmissionController::class, 'create'])->name('projects.candidates.profiles.submissions.create');
-    Route::get('/mail-logs', [CandidateProfileSubmissionController::class, 'show'])->name('projects.candidates.profiles.submissions.show');
+    Route::get('/mail-logs', [CandidateProfileSubmissionController::class, 'show'])->name('submissions.show');
     Route::post('/projects/{project}/candidates/{candidate}/profiles/{profile}/submissions', [CandidateProfileSubmissionController::class, 'store'])->name('projects.candidates.profiles.submissions.store');
     
     // Keywords
