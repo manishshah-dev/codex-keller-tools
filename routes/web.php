@@ -18,6 +18,7 @@ use App\Http\Controllers\CandidateController;
 use App\Http\Controllers\CandidateProfileController;
 use App\Http\Controllers\TrashController;
 use App\Http\Controllers\CandidateProfileSubmissionController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -134,8 +135,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/ai-settings/{aiSetting}/edit', [AISettingController::class, 'edit'])->name('ai-settings.edit');
         Route::put('/ai-settings/{aiSetting}', [AISettingController::class, 'update'])->name('ai-settings.update');
         Route::delete('/ai-settings/{aiSetting}', [AISettingController::class, 'destroy'])->name('ai-settings.destroy');
-        Route::post('/ai-settings/{aiSetting}/test-connection', [AISettingController::class, 'testConnection'])->name('ai-settings.test-connection');
-        
+    Route::post('/ai-settings/{aiSetting}/test-connection', [AISettingController::class, 'testConnection'])->name('ai-settings.test-connection');
+
         // AI Prompts
         Route::get('/ai-settings/prompts', [AISettingController::class, 'prompts'])->name('ai-settings.prompts');
         Route::get('/ai-settings/prompts/create', [AISettingController::class, 'createPrompt'])->name('ai-settings.prompts.create');
@@ -144,6 +145,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/ai-settings/prompts/{prompt}', [AISettingController::class, 'updatePrompt'])->name('ai-settings.prompts.update');
         Route::delete('/ai-settings/prompts/{prompt}', [AISettingController::class, 'destroyPrompt'])->name('ai-settings.prompts.destroy');
     // });
+
+    // User Management (Admin only)
+    Route::resource('users', UserController::class)->except(['show']);
+    Route::post('/users/{user}/activate', [UserController::class, 'activate'])->name('users.activate');
     
     // User Profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
