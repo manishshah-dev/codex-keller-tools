@@ -19,6 +19,7 @@ class UserSeeder extends Seeder
             'email' => 'admin@example.com',
             'password' => Hash::make('password'),
             'role' => 'admin',
+            'is_active' => true,
         ]);
 
         // Create regular user
@@ -27,6 +28,7 @@ class UserSeeder extends Seeder
             'email' => 'user@example.com',
             'password' => Hash::make('password'),
             'role' => 'user',
+            'is_active' => true,
         ]);
     }
 }
