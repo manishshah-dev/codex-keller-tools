@@ -19,6 +19,8 @@ use App\Http\Controllers\CandidateProfileController;
 use App\Http\Controllers\TrashController;
 use App\Http\Controllers\CandidateProfileSubmissionController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WorkableSettingController;
+use App\Http\Controllers\WorkableJobController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/inactive', 'auth.inactive')->name('inactive');
@@ -102,6 +104,10 @@ Route::middleware(['auth', 'verified', 'active'])->group(function () {
     Route::post('/projects/{project}/analyzer/chat', [CandidateController::class, 'chat'])->name('projects.analyzer.chat');
     Route::post('/projects/{project}/candidates/import-workable', [CandidateController::class, 'importFromWorkable'])->name('projects.candidates.import-workable');
     Route::post('/projects/{project}/candidates/batch-upload', [CandidateController::class, 'batchUpload'])->name('projects.candidates.batch-upload');
+
+    // Workable Jobs
+    Route::get('/workable-jobs', [WorkableJobController::class, 'index'])->name('workable-jobs.index');
+    Route::post('/workable-jobs/fetch', [WorkableJobController::class, 'fetch'])->name('workable-jobs.fetch');
     
     // Project Requirements
     Route::post('/projects/{project}/requirements', [ProjectRequirementController::class, 'store'])->name('projects.requirements.store');
@@ -180,7 +186,7 @@ Route::middleware(['auth', 'verified', 'active', 'role:admin'])->group(function 
     Route::put('/ai-settings/{aiSetting}', [AISettingController::class, 'update'])->name('ai-settings.update');
     Route::delete('/ai-settings/{aiSetting}', [AISettingController::class, 'destroy'])->name('ai-settings.destroy');
     Route::post('/ai-settings/{aiSetting}/test-connection', [AISettingController::class, 'testConnection'])->name('ai-settings.test-connection');
-    
+
     // AI Prompts
     Route::get('/ai-settings/prompts', [AISettingController::class, 'prompts'])->name('ai-settings.prompts');
     Route::get('/ai-settings/prompts/create', [AISettingController::class, 'createPrompt'])->name('ai-settings.prompts.create');
@@ -188,6 +194,9 @@ Route::middleware(['auth', 'verified', 'active', 'role:admin'])->group(function 
     Route::get('/ai-settings/prompts/{prompt}/edit', [AISettingController::class, 'editPrompt'])->name('ai-settings.prompts.edit');
     Route::put('/ai-settings/prompts/{prompt}', [AISettingController::class, 'updatePrompt'])->name('ai-settings.prompts.update');
     Route::delete('/ai-settings/prompts/{prompt}', [AISettingController::class, 'destroyPrompt'])->name('ai-settings.prompts.destroy');
+
+    // Workable Settings
+    Route::resource('workable-settings', WorkableSettingController::class)->except(['show']);
 
 });
 
