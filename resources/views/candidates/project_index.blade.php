@@ -107,15 +107,74 @@
                         <div class="border border-gray-200 rounded-lg p-4">
                             <h4 class="font-medium mb-2">Import from Workable</h4>
                             <p class="text-sm text-gray-600 mb-4">Import candidates directly from your Workable account.</p>
-                            
+
                             <form action="{{ route('projects.candidates.import-workable', $project) }}" method="POST" class="space-y-4">
                                 @csrf
-                                <div>
-                                    <x-input-label for="workable_url" :value="__('Workable Job URL')" />
-                                    <x-text-input id="workable_url" class="block mt-1 w-full" type="text" name="workable_url" required />
-                                    <x-input-error :messages="$errors->get('workable_url')" class="mt-2" />
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <x-input-label for="department_filter" :value="__('Department')" />
+                                        <select id="department_filter" class="select2 block mt-1 w-full">
+                                            <option value="">All Departments</option>
+                                            @foreach($departments as $dept)
+                                                <option value="{{ $dept }}">{{ $dept }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <x-input-label for="country_filter" :value="__('Country')" />
+                                        <select id="country_filter" class="select2 block mt-1 w-full">
+                                            <option value="">All Countries</option>
+                                            @foreach($countries as $country)
+                                                <option value="{{ $country }}">{{ $country }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <x-input-label for="workable_job" :value="__('Job')" />
+                                        <select id="workable_job" name="workable_job" class="select2 block mt-1 w-full">
+                                            <option value="">Select Job</option>
+                                            @foreach($workableJobs as $job)
+                                                @php
+                                                    $city = $job['location']['city'] ?? '';
+                                                    $country = $job['location']['country'] ?? ($job['location']['country_name'] ?? '');
+                                                @endphp
+                                                <option value="{{ $job['shortcode'] ?? $job['id'] }}" data-department="{{ $job['department'] ?? '' }}" data-country="{{ $country }}">
+                                                    {{ $job['title'] }} ({{ trim($city . ($city && $country ? ',' : '') . $country) }})
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
                                 </div>
-                                
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="inline-flex items-center mt-2">
+                                            <input type="checkbox" id="filter_email_toggle" class="mr-2">
+                                            <span>{{ __('Filter by Email') }}</span>
+                                        </label>
+                                        <input type="email" id="filter_email" name="filter_email" class="block mt-1 w-full hidden" />
+                                    </div>
+                                    <div>
+                                        <label class="inline-flex items-center mt-2">
+                                            <input type="checkbox" id="filter_date_toggle" class="mr-2">
+                                            <span>{{ __('Filter by Created Date') }}</span>
+                                        </label>
+                                        <input type="datetime-local" id="filter_created_after" name="filter_created_after" class="block mt-1 w-full hidden" />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <x-input-label for="workable_candidates" :value="__('Select Candidates')" />
+                                    <select id="workable_candidates" name="workable_candidates[]" multiple class="select2 block mt-1 w-full">
+                                        @foreach($workableCandidates ?? [] as $candidate)
+                                            @php $job = $candidate['job']['title'] ?? 'Unknown Job'; @endphp
+                                            <option value="{{ $candidate['id'] }}">
+                                                {{ $candidate['name'] }} - {{ $job }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <x-input-error :messages="$errors->get('workable_candidates')" class="mt-2" />
+                                </div>
                                 <div class="flex justify-end">
                                     <x-primary-button>
                                         {{ __('Import Candidates') }}
@@ -375,6 +434,33 @@
         $('#analyze_ai_setting_id').select2({ width: '100%' });
         $('#analyze_ai_model').select2({ width: '100%' });
         $('#analyze_ai_prompt_id').select2({ width: '100%' });
+        $('#workable_candidates').select2({ width: '100%' });
+        $('#department_filter').select2({ width: '100%' });
+        $('#country_filter').select2({ width: '100%' });
+        $('#workable_job').select2({ width: '100%' });
+
+        // filter inputs toggle
+        $('#filter_email_toggle').on('change', function() {
+            $('#filter_email').toggleClass('hidden', !this.checked);
+        });
+        $('#filter_date_toggle').on('change', function() {
+            $('#filter_created_after').toggleClass('hidden', !this.checked);
+        });
+
+        // job filtering by department and country
+        function filterJobs() {
+            const dept = $('#department_filter').val();
+            const country = $('#country_filter').val();
+            $('#workable_job option').each(function() {
+                const matchDept = !dept || $(this).data('department') == dept;
+                const matchCountry = !country || $(this).data('country') == country;
+                $(this).toggle(matchDept && matchCountry || $(this).val() === '');
+            });
+            $('#workable_job').val(null).trigger('change');
+        }
+
+        $('#department_filter').on('change', filterJobs);
+        $('#country_filter').on('change', filterJobs);
 
     });
 </script>
