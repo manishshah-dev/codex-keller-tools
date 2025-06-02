@@ -79,6 +79,7 @@ class CandidateController extends Controller
                 $workableCandidates = $workableService->listCandidates($workableSetting);
             } catch (\Exception $e) {
                 Log::error('Workable candidates fetch failed: ' . $e->getMessage());
+                session()->flash('error', 'Could not retrieve candidates from Workable at this time. Please check Workable settings or try again later.');
             }
         }
 
