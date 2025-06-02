@@ -18,6 +18,7 @@ class WorkableService
         // start with limit=100 (maximum allowed per docs)
         $next = "https://{$setting->subdomain}.workable.com/spi/v3/candidates?limit=100";
 
+
         while ($next) {
             $response = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $setting->api_token,
