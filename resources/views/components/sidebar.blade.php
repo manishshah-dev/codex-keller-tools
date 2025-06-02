@@ -57,7 +57,7 @@
 
                 <a href="{{ route('workable-jobs.index') }}" class="nav-item flex items-center px-4 py-3 text-sm font-medium rounded-lg {{ request()->routeIs('workable-jobs.*') ? 'bg-green-50 text-green-700 border-r-2 border-green-500' : 'text-gray-700 hover:bg-gray-50' }}" title="{{ __('Workable Jobs') }}">
                     <svg class="nav-icon h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v16a1 1 0 01-1 1H4a1 1 0 01-1-1V4z" />
                     </svg>
                     <span class="nav-text whitespace-nowrap ml-3">{{ __('Workable Jobs') }}</span>
                 </a>

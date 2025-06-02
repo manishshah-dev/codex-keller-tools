@@ -12,6 +12,25 @@ class WorkableJob extends Model
     protected $fillable = [
         'workable_id',
         'title',
+        'full_title',
         'shortcode',
+        'state',
+        'department',
+        'department_hierarchy',
+        'url',
+        'application_url',
+        'shortlink',
+        'location',
+        'locations',
+        'salary',
+        'workable_created_at',
+    ];
+
+    protected $casts = [
+        'department_hierarchy' => 'json',
+        'location' => 'json',
+        'locations' => 'json',
+        'salary' => 'json',
+        'workable_created_at' => 'datetime',
     ];
 }

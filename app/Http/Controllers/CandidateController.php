@@ -24,7 +24,6 @@ use Illuminate\Support\Str;
 use Smalot\PdfParser\Parser;
 use PhpOffice\PhpWord\IOFactory;
 use App\Services\ModelRegistryService; // Import the service
-use App\Models\WorkableCandidate;
 use App\Services\WorkableService;
 use App\Models\WorkableSetting;
 use Symfony\Component\HttpFoundation\StreamedResponse; // For file response
@@ -52,8 +51,7 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\View\View
      */
-
-    public function projectIndex(Project $project, ModelRegistryService $modelRegistryService, WorkableService $workableService): View // Inject service
+    public function projectIndex(Request $request, Project $project, ModelRegistryService $modelRegistryService, WorkableService $workableService): View
     {
         $this->authorize('view', $project);
         
@@ -73,9 +71,33 @@ class CandidateController extends Controller
         // Fetch the dynamic model map
         $providerModels = $modelRegistryService->getModels();
 
-        // Fetch Workable candidates stored locally
-        $workableCandidates = WorkableCandidate::orderBy('name')->get();
-
+        // Fetch Workable jobs for filtering
+        $workableJobs = [];
+        $workableCandidates = [];
+        $workableSetting = WorkableSetting::where('is_active', true)->first();
+        if ($workableSetting) {
+            $workableJobs = \App\Models\WorkableJob::orderBy('full_title')->get();
+            if ($request->filled('workable_job_id') || $request->filled('candidate_email') || $request->filled('candidate_created_after')) {
+                $params = [];
+                if ($request->filled('workable_job_id')) {
+                    $job = \App\Models\WorkableJob::find($request->workable_job_id);
+                    if ($job) {
+                        $params['shortcode'] = $job->shortcode;
+                    }
+                }
+                if ($request->filled('candidate_email')) {
+                    $params['email'] = $request->candidate_email;
+                }
+                if ($request->filled('candidate_created_after')) {
+                    $params['created_after'] = \Carbon\Carbon::parse($request->candidate_created_after)->toIso8601String();
+                }
+                try {
+                    $workableCandidates = $workableService->listCandidates($workableSetting, $params);
+                } catch (\Exception $e) {
+                    Log::error('Workable candidates fetch failed: ' . $e->getMessage());
+                }
+            }
+        }
 
         return view('candidates.project_index', compact(
             'project',
@@ -84,7 +106,8 @@ class CandidateController extends Controller
             'aiSettings', // Pass settings
             'prompts',    // Pass prompts
             'providerModels', // Pass model map
-            'workableCandidates'
+            'workableCandidates',
+            'workableJobs'
         ));
     }
     
@@ -616,7 +639,7 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\Http\RedirectResponse
      */
-   public function importFromWorkable(Request $request, Project $project): RedirectResponse
+     public function importFromWorkable(Request $request, Project $project, WorkableService $workableService): RedirectResponse
     {
         $this->authorize('update', $project);
 
@@ -625,18 +648,21 @@ class CandidateController extends Controller
             'workable_candidates.*' => 'string',
         ]);
 
+        $setting = WorkableSetting::where('is_active', true)->first();
+        if (!$setting) {
+            return redirect()->route('projects.candidates.index', $project)
+                ->with('error', 'No active Workable settings found.');
+        }
+
         $imported = 0;
         $failed = 0;
 
         foreach ($validated['workable_candidates'] as $candidateId) {
-            $wc = WorkableCandidate::where('workable_id', $candidateId)->first();
-            if (!$wc) {
-                $failed++;
-                continue;
-            }
-
             try {
-                $name = $wc->name;
+                $data = $workableService->getCandidate($setting, $candidateId);
+                $info = $data['candidate'] ?? $data;
+
+                $name = $info['name'] ?? '';
                 [$first, $last] = array_pad(explode(' ', $name, 2), 2, null);
 
                 Candidate::firstOrCreate([
@@ -646,10 +672,10 @@ class CandidateController extends Controller
                     'user_id' => Auth::id(),
                     'first_name' => $first ?? 'Unknown',
                     'last_name' => $last ?? '',
-                    'email' => $wc->email,
-                    'phone' => $wc->phone,
-                    'location' => null,
-                    'current_position' => $wc->job_title,
+                    'email' => $info['email'] ?? null,
+                    'phone' => $info['phone'] ?? null,
+                    'location' => $info['address'] ?? null,
+                    'current_position' => $info['job']['title'] ?? null,
                     'status' => 'new',
                     'source' => 'workable',
                 ]);

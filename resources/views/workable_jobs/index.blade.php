@@ -4,21 +4,14 @@
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
                 {{ __('Workable Jobs') }}
             </h2>
-            <div class="flex space-x-2">
-                <form action="{{ route('workable-jobs.fetch') }}" method="POST">
-                    @csrf
-                    <x-primary-button>{{ __('Import Jobs') }}</x-primary-button>
-                </form>
-                <form action="{{ route('workable-jobs.import-candidates') }}" method="POST">
-                    @csrf
-                    <input type="hidden" name="jobs" id="selected-jobs" />
-                    <x-primary-button>{{ __('Import Candidates') }}</x-primary-button>
-                </form>
-            </div>
+            <form action="{{ route('workable-jobs.fetch') }}" method="POST">
+                @csrf
+                <x-primary-button>{{ __('Fetch Jobs') }}</x-primary-button>
+            </form>
         </div>
     </x-slot>
 
-    <div class="py-6">
+    <div>
         <div class="max-w-7xl mx-auto">
             @if(session('success'))
                 <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
@@ -34,41 +27,36 @@
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
                     @if($jobs->count() > 0)
-                        <table class="min-w-full">
-                            <thead>
-                                <tr>
-                                    <th class="py-2 px-4 text-left">Select</th>
-                                    <th class="py-2 px-4 text-left">Title</th>
-                                    <th class="py-2 px-4 text-left">Shortcode</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($jobs as $job)
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white">
+                                <thead class="bg-gray-100">
                                     <tr>
-                                        <td class="py-2 px-4">
-                                            <input type="checkbox" class="job-checkbox" value="{{ $job->id }}">
-                                        </td>
-                                        <td class="py-2 px-4">{{ $job->title }}</td>
-                                        <td class="py-2 px-4">{{ $job->shortcode }}</td>
+                                        <th class="py-2 px-4 text-left">Title</th>
+                                        <th class="py-2 px-4 text-left">Shortcode</th>
+                                        <th class="py-2 px-4 text-left">Department</th>
+                                        <th class="py-2 px-4 text-left">Created</th>
                                     </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    @foreach($jobs as $job)
+                                        <tr>
+                                            <td class="py-2 px-4">{{ $job->full_title ?? $job->title }}</td>
+                                            <td class="py-2 px-4">{{ $job->shortcode }}</td>
+                                            <td class="py-2 px-4">{{ $job->department }}</td>
+                                            <td class="py-2 px-4">{{ optional($job->workable_created_at)->format('Y-m-d') }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-4">
+                            {{ $jobs->links() }}
+                        </div>
                     @else
-                        <p>No jobs imported.</p>
+                        <p class="text-gray-600">No jobs found.</p>
                     @endif
                 </div>
             </div>
         </div>
     </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const form = document.querySelector('form[action="{{ route('workable-jobs.import-candidates') }}"]');
-            form.addEventListener('submit', e => {
-                const selected = Array.from(document.querySelectorAll('.job-checkbox:checked')).map(cb => cb.value);
-                document.getElementById('selected-jobs').value = JSON.stringify(selected);
-            });
-        });
-    </script>
 </x-app-layout>

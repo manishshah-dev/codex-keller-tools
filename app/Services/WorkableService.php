@@ -7,38 +7,21 @@ use Illuminate\Support\Facades\Http;
 
 class WorkableService
 {
-    public function listCandidates(WorkableSetting $setting): array
+    private function request(string $url, WorkableSetting $setting)
     {
-        $candidates = [];
-        $next = "https://{$setting->subdomain}.workable.com/spi/v3/candidates?limit=100";
-
-        while ($next) {
-            $response = Http::withoutVerifying()->withHeaders([
-                'Authorization' => 'Bearer ' . $setting->api_token,
-                'Accept' => 'application/json',
-            ])->get($next);
-
-            if ($response->failed()) {
-                throw new \Exception('Workable API error: ' . $response->body());
-            }
-
-            $data = $response->json();
-            foreach ($data['candidates'] ?? [] as $candidate) {
-                $candidates[] = $candidate;
-            }
-            $next = $data['paging']['next'] ?? null;
-        }
-
-        return $candidates;
-    }
-
-    public function getCandidate(WorkableSetting $setting, string $id): array
-    {
-        $url = "https://{$setting->subdomain}.workable.com/spi/v3/candidates/{$id}";
         $response = Http::withoutVerifying()->withHeaders([
             'Authorization' => 'Bearer ' . $setting->api_token,
             'Accept' => 'application/json',
         ])->get($url);
+
+        if ($response->status() === 429) {
+            $retry = (int) $response->header('Retry-After', 1);
+            sleep($retry);
+            $response = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $setting->api_token,
+                'Accept' => 'application/json',
+            ])->get($url);
+        }
 
         if ($response->failed()) {
             throw new \Exception('Workable API error: ' . $response->body());
@@ -53,16 +36,7 @@ class WorkableService
         $next = "https://{$setting->subdomain}.workable.com/spi/v3/jobs?limit=100";
 
         while ($next) {
-            $response = Http::withoutVerifying()->withHeaders([
-                'Authorization' => 'Bearer ' . $setting->api_token,
-                'Accept' => 'application/json',
-            ])->get($next);
-
-            if ($response->failed()) {
-                throw new \Exception('Workable API error: ' . $response->body());
-            }
-
-            $data = $response->json();
+            $data = $this->request($next, $setting);
             foreach ($data['jobs'] ?? [] as $job) {
                 $jobs[] = $job;
             }
@@ -72,22 +46,15 @@ class WorkableService
         return $jobs;
     }
 
-    public function listJobCandidates(WorkableSetting $setting, string $jobId): array
+    public function listCandidates(WorkableSetting $setting, array $params = []): array
     {
         $candidates = [];
-        $next = "https://{$setting->subdomain}.workable.com/spi/v3/jobs/{$jobId}/candidates?limit=100";
+        $params['limit'] = 100;
+        $query = http_build_query($params);
+        $next = "https://{$setting->subdomain}.workable.com/spi/v3/candidates" . ($query ? "?{$query}" : '');
 
         while ($next) {
-            $response = Http::withoutVerifying()->withHeaders([
-                'Authorization' => 'Bearer ' . $setting->api_token,
-                'Accept' => 'application/json',
-            ])->get($next);
-
-            if ($response->failed()) {
-                throw new \Exception('Workable API error: ' . $response->body());
-            }
-
-            $data = $response->json();
+            $data = $this->request($next, $setting);
             foreach ($data['candidates'] ?? [] as $candidate) {
                 $candidates[] = $candidate;
             }
@@ -95,5 +62,11 @@ class WorkableService
         }
 
         return $candidates;
+    }
+
+    public function getCandidate(WorkableSetting $setting, string $id): array
+    {
+        $url = "https://{$setting->subdomain}.workable.com/spi/v3/candidates/{$id}";
+        return $this->request($url, $setting);
     }
 }
