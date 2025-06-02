@@ -106,28 +106,72 @@
                         <!-- Workable Import -->
                         <div class="border border-gray-200 rounded-lg p-4">
                             <h4 class="font-medium mb-2">Import from Workable</h4>
-                            <p class="text-sm text-gray-600 mb-4">Import candidates directly from your Workable account.</p>
-                            
-                            <form action="{{ route('projects.candidates.import-workable', $project) }}" method="POST" class="space-y-4">
-                                @csrf
+                            <p class="text-sm text-gray-600 mb-4">Select a job to fetch candidates from Workable, then import them.</p>
+
+                            <!-- Form 1: Fetch Candidates for a Job -->
+                            <form method="GET" action="{{ route('projects.candidates.index', $project) }}" class="space-y-4 mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+                                @csrf <!-- CSRF not strictly needed for GET but good practice if it becomes POST -->
                                 <div>
-                                    <x-input-label for="workable_candidates" :value="__('Select Candidates')" />
-                                    <select id="workable_candidates" name="workable_candidates[]" multiple class="select2 block mt-1 w-full">
-                                        @foreach($workableCandidates ?? [] as $candidate)
-                                            @php $job = $candidate['job']['title'] ?? 'Unknown Job'; @endphp
-                                            <option value="{{ $candidate['id'] }}">
-                                                {{ $candidate['name'] }} - {{ $job }}
+                                    <x-input-label for="workable_job_id" :value="__('Select Workable Job')" />
+                                    <select id="workable_job_id" name="workable_job_id" class="select2-local-jobs block mt-1 w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm">
+                                        <option value="">-- Select a Job --</option>
+                                        @foreach($localWorkableJobs ?? [] as $job)
+                                            <option value="{{ $job->id }}" {{ old('workable_job_id', $selectedWorkableJobId ?? '') == $job->id ? 'selected' : '' }}>
+                                                {{ $job->title }} ({{ $job->shortcode }})
                                             </option>
                                         @endforeach
                                     </select>
-                                    <x-input-error :messages="$errors->get('workable_candidates')" class="mt-2" />
+                                </div>
+                                <div>
+                                    <x-input-label for="workable_filter_email" :value="__('Filter by Email (Optional)')" />
+                                    <x-text-input id="workable_filter_email" name="workable_filter_email" type="email" class="mt-1 block w-full" :value="old('workable_filter_email', request('workable_filter_email'))" />
+                                </div>
+                                <div>
+                                    <x-input-label for="workable_filter_created_after" :value="__('Created After Date (Optional)')" />
+                                    <x-text-input id="workable_filter_created_after" name="workable_filter_created_after" type="date" class="mt-1 block w-full" :value="old('workable_filter_created_after', request('workable_filter_created_after'))" />
                                 </div>
                                 <div class="flex justify-end">
-                                    <x-primary-button>
-                                        {{ __('Import Candidates') }}
+                                    <x-primary-button type="submit">
+                                        {{ __('Fetch Candidates for Job') }}
                                     </x-primary-button>
                                 </div>
                             </form>
+
+                            <!-- Section/Form 2: Import Fetched Candidates -->
+                            @if(!empty($workableJobCandidates) && count($workableJobCandidates) > 0)
+                                <form method="POST" action="{{ route('projects.candidates.import-workable', $project) }}" class="space-y-4">
+                                    @csrf
+                                    <h5 class="font-medium mb-2 text-md">Candidates Found for Selected Job:</h5>
+                                    <div class="max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md p-2 space-y-1">
+                                        @foreach($workableJobCandidates as $candidate)
+                                            <label class="flex items-center space-x-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                                                <input type="checkbox" name="workable_candidates[]" value="{{ $candidate['id'] }}" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900 dark:focus:ring-indigo-600 dark:focus:ring-offset-gray-800">
+                                                <span class="text-sm">{{ $candidate['name'] ?? 'N/A' }}
+                                                    @if(isset($candidate['email']) && $candidate['email'])
+                                                        <span class="text-xs text-gray-500 dark:text-gray-400">({{ $candidate['email'] }})</span>
+                                                    @endif
+                                                     @if(isset($candidate['job']['title']) && $candidate['job']['title'])
+                                                        <span class="text-xs text-gray-500 dark:text-gray-400">- {{ $candidate['job']['title'] }}</span>
+                                                    @endif
+                                                </span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                    <div class="flex justify-end mt-4">
+                                        <x-primary-button type="submit">
+                                            {{ __('Import Selected Candidates') }}
+                                        </x-primary-button>
+                                    </div>
+                                </form>
+                            @elseif(request()->has('workable_job_id') && (!isset($workableJobCandidates) || count($workableJobCandidates) === 0))
+                                <p class="text-sm text-gray-600 dark:text-gray-400">
+                                    No candidates found for the selected job and filters in Workable, or there was an issue fetching them. Ensure the job has candidates or try different filters.
+                                </p>
+                            @elseif(request()->has('workable_job_id')) <!-- This covers the case where form was submitted but $workableJobCandidates might be null/not set -->
+                                <p class="text-sm text-gray-600 dark:text-gray-400">
+                                    Please select a job and click "Fetch Candidates" to see available candidates from Workable.
+                                </p>
+                            @endif
                         </div>
                         
                         <!-- Batch Upload -->
@@ -381,7 +425,8 @@
         $('#analyze_ai_setting_id').select2({ width: '100%' });
         $('#analyze_ai_model').select2({ width: '100%' });
         $('#analyze_ai_prompt_id').select2({ width: '100%' });
-        $('#workable_candidates').select2({ width: '100%' });
+        // $('#workable_candidates').select2({ width: '100%' }); // Old selector, commented out/removed
+        $('.select2-local-jobs').select2({ width: '100%' }); // New selector for Workable Jobs dropdown
 
     });
 </script>

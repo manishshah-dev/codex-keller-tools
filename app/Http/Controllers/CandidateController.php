@@ -9,6 +9,7 @@ use App\Models\CandidateChatMessage;
 use App\Models\AISetting;
 use App\Services\AIService;
 use App\Models\AIPrompt;
+use App\Models\WorkableJob; // Added for Workable Jobs
 use App\Jobs\AnalyzeAllCandidatesJob; // Import the job class
 use Illuminate\Http\Request;
 // Removed duplicate Project import
@@ -51,7 +52,7 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\View\View
      */
-    public function projectIndex(Project $project, ModelRegistryService $modelRegistryService, WorkableService $workableService): View // Inject service
+    public function projectIndex(Request $request, Project $project, ModelRegistryService $modelRegistryService, WorkableService $workableService): View // Inject service
     {
         $this->authorize('view', $project);
         
@@ -71,15 +72,50 @@ class CandidateController extends Controller
         // Fetch the dynamic model map
         $providerModels = $modelRegistryService->getModels();
 
-        // Fetch Workable candidates if settings available
-        $workableCandidates = [];
-        $workableSetting = WorkableSetting::where('is_active', true)->first();
-        if ($workableSetting) {
-            try {
-                $workableCandidates = $workableService->listCandidates($workableSetting);
-            } catch (\Exception $e) {
-                Log::error('Workable candidates fetch failed: ' . $e->getMessage());
-                session()->flash('error', 'Could not retrieve candidates from Workable at this time. Please check Workable settings or try again later.');
+        // Fetch local Workable jobs for selection
+        $localWorkableJobs = WorkableJob::where('state', 'published') // Consider other states like 'internal' if needed
+                                      ->orderBy('title')
+                                      ->get();
+
+        // Initialize for displaying candidates fetched from Workable for a selected job
+        $workableJobCandidates = [];
+        $selectedWorkableJobId = $request->input('workable_job_id');
+        $filterEmail = $request->input('workable_filter_email');
+        $filterCreatedAfter = $request->input('workable_filter_created_after');
+        $selectedWorkableJobShortcode = null;
+        $selectedWorkableJobTitle = null;
+
+        if ($selectedWorkableJobId) {
+            $selectedJob = WorkableJob::find($selectedWorkableJobId);
+
+            if ($selectedJob && $selectedJob->shortcode) {
+                $selectedWorkableJobShortcode = $selectedJob->shortcode;
+                $selectedWorkableJobTitle = $selectedJob->title;
+
+                $workableSetting = WorkableSetting::where('is_default', true)->where('is_active', true)->first();
+                if (!$workableSetting) {
+                    $workableSetting = WorkableSetting::where('is_active', true)->first();
+                }
+
+                if ($workableSetting) {
+                    try {
+                        // Assuming WorkableService->listCandidates signature is:
+                        // listCandidates(WorkableSetting $setting, ?string $shortcode = null, ?string $email = null, ?string $createdAfter = null, int $limit = 100)
+                        $workableJobCandidates = $this->workableService->listCandidates(
+                            $workableSetting,
+                            $selectedJob->shortcode,
+                            $filterEmail,
+                            $filterCreatedAfter
+                        );
+                    } catch (\Exception $e) {
+                        Log::error('Workable candidates fetch failed for job shortcode: ' . $selectedJob->shortcode . '. Error: ' . $e->getMessage());
+                        session()->flash('error', 'Could not retrieve candidates from Workable for the selected job. Error: ' . $e->getMessage());
+                    }
+                } else {
+                    session()->flash('error', 'No active Workable setting found to fetch candidates.');
+                }
+            } else {
+                session()->flash('warning', 'Selected Workable job not found or has no shortcode.');
             }
         }
 
@@ -90,7 +126,13 @@ class CandidateController extends Controller
             'aiSettings', // Pass settings
             'prompts',    // Pass prompts
             'providerModels', // Pass model map
-            'workableCandidates'
+            'localWorkableJobs',
+            'workableJobCandidates',
+            'selectedWorkableJobId',
+            'filterEmail',
+            'filterCreatedAfter',
+            'selectedWorkableJobShortcode',
+            'selectedWorkableJobTitle'
         ));
     }
     
@@ -631,7 +673,11 @@ class CandidateController extends Controller
             'workable_candidates.*' => 'string',
         ]);
 
-        $setting = WorkableSetting::where('is_active', true)->first();
+        $setting = WorkableSetting::where('is_active', true)->where('is_default', true)->first();
+        if (!$setting) {
+            $setting = WorkableSetting::where('is_active', true)->first();
+        }
+
         if (!$setting) {
             return redirect()->route('projects.candidates.index', $project)
                 ->with('error', 'No active Workable settings found.');
@@ -666,7 +712,7 @@ class CandidateController extends Controller
                 $imported++;
             } catch (\Exception $e) {
                 $failed++;
-                Log::error('Workable import error: ' . $e->getMessage());
+                Log::error('Workable import error for candidate ID ' . $candidateId . ': ' . $e->getMessage());
             }
         }
 

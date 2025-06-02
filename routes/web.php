@@ -193,6 +193,9 @@ Route::middleware(['auth', 'verified', 'active', 'role:admin'])->group(function 
     // Workable Settings
     Route::resource('workable-settings', WorkableSettingController::class)->except(['show']);
 
+    // Workable Jobs (Admin only)
+    Route::get('/workable-jobs', [App\Http\Controllers\WorkableJobController::class, 'index'])->name('workable-jobs.index');
+    Route::post('/workable-jobs/sync', [App\Http\Controllers\WorkableJobController::class, 'syncJobs'])->name('workable-jobs.sync');
 });
 
 require __DIR__.'/auth.php';
