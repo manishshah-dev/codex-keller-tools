@@ -107,19 +107,66 @@
                         <div class="border border-gray-200 rounded-lg p-4">
                             <h4 class="font-medium mb-2">Import from Workable</h4>
                             <p class="text-sm text-gray-600 mb-4">Import candidates directly from your Workable account.</p>
-                            
-                            <form action="{{ route('projects.candidates.import-workable', $project) }}" method="POST" class="space-y-4">
+
+                            <form method="GET" action="{{ route('projects.candidates.index', $project) }}" class="space-y-4">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <x-input-label for="workable_department" :value="__('Department')" />
+                                        <select id="workable_department" name="department" class="select2 block mt-1 w-full">
+                                            <option value="">{{ __('Select Department') }}</option>
+                                            @php
+                                                $departments = collect($workableJobs ?? [])->pluck('department')->filter()->unique();
+                                            @endphp
+                                            @foreach($departments as $dept)
+                                                <option value="{{ $dept }}" @selected(request('department') === $dept)>{{ $dept }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <x-input-label for="workable_job" :value="__('Job')" />
+                                        <select id="workable_job" name="job" class="select2 block mt-1 w-full">
+                                            <option value="">{{ __('Select Job') }}</option>
+                                            {{-- Options populated by JS based on department --}}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="flex items-center space-x-2">
+                                        <input type="checkbox" id="filter_email" name="filter_email" value="1" @checked(request('filter_email'))>
+                                        <x-input-label for="filter_email" value="Email" />
+                                        <input id="filter_email_value" type="email" name="email" value="{{ request('email') }}" class="block w-full border-gray-300 rounded-md" />
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <input type="checkbox" id="filter_created_after" name="filter_created_after" value="1" @checked(request('filter_created_after'))>
+                                        <x-input-label for="filter_created_after" value="{{ __('Created After') }}" />
+                                        <input id="filter_created_after_value" type="datetime-local" name="created_after" value="{{ request('created_after') }}" class="block w-full border-gray-300 rounded-md" />
+                                    </div>
+                                </div>
+                                <div class="flex justify-end">
+                                    <x-primary-button type="submit">{{ __('Load Candidates') }}</x-primary-button>
+                                </div>
+                            </form>
+
+                            <form action="{{ route('projects.candidates.import-workable', $project) }}" method="POST" class="space-y-4 mt-6">
                                 @csrf
                                 <div>
-                                    <x-input-label for="workable_url" :value="__('Workable Job URL')" />
-                                    <x-text-input id="workable_url" class="block mt-1 w-full" type="text" name="workable_url" required />
-                                    <x-input-error :messages="$errors->get('workable_url')" class="mt-2" />
+                                    <x-input-label for="workable_candidates" :value="__('Select Candidates')" />
+                                    <select id="workable_candidates" name="workable_candidates[]" multiple class="select2 block mt-1 w-full">
+                                        @foreach($workableCandidates ?? [] as $candidate)
+                                            @php
+                                                $city = $candidate['address'] ?? null;
+                                                $country = $candidate['country'] ?? null;
+                                                $job = $candidate['job']['title'] ?? 'Unknown Job';
+                                            @endphp
+                                            <option value="{{ $candidate['id'] }}">
+                                                {{ $candidate['name'] }} - {{ $job }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <x-input-error :messages="$errors->get('workable_candidates')" class="mt-2" />
                                 </div>
-                                
                                 <div class="flex justify-end">
-                                    <x-primary-button>
-                                        {{ __('Import Candidates') }}
-                                    </x-primary-button>
+                                    <x-primary-button>{{ __('Import Candidates') }}</x-primary-button>
                                 </div>
                             </form>
                         </div>
@@ -375,6 +422,37 @@
         $('#analyze_ai_setting_id').select2({ width: '100%' });
         $('#analyze_ai_model').select2({ width: '100%' });
         $('#analyze_ai_prompt_id').select2({ width: '100%' });
+        $('#workable_department').select2({ width: '100%' });
+        $('#workable_job').select2({ width: '100%' });
+        $('#workable_candidates').select2({ width: '100%' });
+
+        const jobs = @json($workableJobs ?? []);
+        function updateJobsDropdown() {
+            const dept = $('#workable_department').val();
+            const jobSelect = $('#workable_job');
+            jobSelect.empty();
+            jobSelect.append(new Option('Select Job', ''));
+            jobs.filter(j => !dept || j.department === dept).forEach(j => {
+                const city = j.location?.city ? j.location.city + ',' : '';
+                const country = j.location?.country ?? '';
+                const text = `${j.title} (${city} ${country})`;
+                const option = new Option(text.trim(), j.shortcode, false, j.shortcode === '{{ request('job') }}');
+                jobSelect.append(option);
+            });
+            jobSelect.trigger('change');
+        }
+
+        $('#workable_department').on('change', updateJobsDropdown);
+        updateJobsDropdown();
+
+        function toggleFilters() {
+            $('#filter_email_value').prop('disabled', !$('#filter_email').prop('checked'));
+            $('#filter_created_after_value').prop('disabled', !$('#filter_created_after').prop('checked'));
+        }
+
+        $('#filter_email').on('change', toggleFilters);
+        $('#filter_created_after').on('change', toggleFilters);
+        toggleFilters();
 
     });
 </script>
