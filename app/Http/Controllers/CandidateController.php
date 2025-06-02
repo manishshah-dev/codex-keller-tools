@@ -24,6 +24,8 @@ use Illuminate\Support\Str;
 use Smalot\PdfParser\Parser;
 use PhpOffice\PhpWord\IOFactory;
 use App\Services\ModelRegistryService; // Import the service
+use App\Services\WorkableService;
+use App\Models\WorkableSetting;
 use Symfony\Component\HttpFoundation\StreamedResponse; // For file response
 
 class CandidateController extends Controller
@@ -49,25 +51,51 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\View\View
      */
-    public function projectIndex(Project $project, ModelRegistryService $modelRegistryService): View // Inject service
+    public function projectIndex(Request $request, Project $project, ModelRegistryService $modelRegistryService, WorkableService $workableService): View // Inject service
     {
         $this->authorize('view', $project);
-        
+
         $candidates = $project->candidates()
             ->orderByScore() // Assumes scopeOrderByScore exists
             ->paginate(10);
-        
+
         $requirements = $project->activeRequirements()->get();
 
         // Fetch AI Settings suitable for CV analysis
-        $aiSettings = AISetting::active()
-            ->get();
-            
+        $aiSettings = AISetting::active()->get();
+
         // Fetch available prompts for CV analysis
         $prompts = AIPrompt::where('feature', 'cv_analyzer')->orderBy('name')->get();
 
         // Fetch the dynamic model map
         $providerModels = $modelRegistryService->getModels();
+
+        $workableCandidates = [];
+        $workableJobs = [];
+
+        $workableSetting = WorkableSetting::where('is_active', true)->first();
+        if ($workableSetting) {
+            try {
+                $workableJobs = $workableService->listJobs($workableSetting);
+
+                $filters = [];
+                if ($request->filled('job')) {
+                    $filters['shortcode'] = $request->query('job');
+                }
+                if ($request->boolean('filter_email') && $request->filled('email')) {
+                    $filters['email'] = $request->query('email');
+                }
+                if ($request->boolean('filter_created_after') && $request->filled('created_after')) {
+                    $filters['created_after'] = $request->query('created_after');
+                }
+
+                if (!empty($filters)) {
+                    $workableCandidates = $workableService->listCandidates($workableSetting, $filters);
+                }
+            } catch (\Exception $e) {
+                Log::error('Workable data fetch failed: ' . $e->getMessage());
+            }
+        }
 
         return view('candidates.project_index', compact(
             'project',
@@ -75,7 +103,9 @@ class CandidateController extends Controller
             'requirements',
             'aiSettings', // Pass settings
             'prompts',    // Pass prompts
-            'providerModels' // Pass model map
+            'providerModels', // Pass model map
+            'workableCandidates',
+            'workableJobs'
         ));
     }
     
@@ -607,18 +637,61 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\Http\RedirectResponse
      */
-    public function importFromWorkable(Request $request, Project $project): RedirectResponse
+    public function importFromWorkable(Request $request, Project $project, WorkableService $workableService): RedirectResponse
     {
         $this->authorize('update', $project);
-        
+
         $validated = $request->validate([
-            'workable_url' => 'required|url',
+            'workable_candidates' => 'required|array',
+            'workable_candidates.*' => 'string',
         ]);
-        
-        // TODO: Implement Workable integration
-        
-        return redirect()->route('projects.candidates.index', $project)
-            ->with('info', 'Workable import not yet implemented.'); // Changed to info
+
+        $setting = WorkableSetting::where('is_active', true)->first();
+        if (!$setting) {
+            return redirect()->route('projects.candidates.index', $project)
+                ->with('error', 'No active Workable settings found.');
+        }
+
+        $imported = 0;
+        $failed = 0;
+
+        foreach ($validated['workable_candidates'] as $candidateId) {
+            try {
+                $data = $workableService->getCandidate($setting, $candidateId);
+                $info = $data['candidate'] ?? $data;
+
+                $name = $info['name'] ?? '';
+                [$first, $last] = array_pad(explode(' ', $name, 2), 2, null);
+
+                Candidate::firstOrCreate([
+                    'project_id' => $project->id,
+                    'workable_id' => $candidateId,
+                ], [
+                    'user_id' => Auth::id(),
+                    'first_name' => $first ?? 'Unknown',
+                    'last_name' => $last ?? '',
+                    'email' => $info['email'] ?? null,
+                    'phone' => $info['phone'] ?? null,
+                    'location' => $info['address'] ?? null,
+                    'current_position' => $info['job']['title'] ?? null,
+                    'status' => 'new',
+                    'source' => 'workable',
+                ]);
+
+                $imported++;
+            } catch (\Exception $e) {
+                $failed++;
+                Log::error('Workable import error: ' . $e->getMessage());
+            }
+        }
+
+        $message = "Imported {$imported} candidate(s).";
+        if ($failed) {
+            $message .= " {$failed} failed.";
+            return redirect()->route('projects.candidates.index', $project)->with('warning', $message);
+        }
+
+        return redirect()->route('projects.candidates.index', $project)->with('success', $message);
     }
     
     /**
