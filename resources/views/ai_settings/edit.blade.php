@@ -128,8 +128,7 @@
                 const isSelected = selectedModels.includes(model); // Check against models enabled in this specific setting
                 const option = document.createElement('option');
                 option.value = model;
-                // Attempt to format model name nicely
-                option.textContent = model.includes('/') ? model.split('/')[1] : model;
+                option.textContent = model; // Display model name as-is
                 if (isSelected) {
                     option.selected = true; // Pre-select if enabled in this setting
                 }

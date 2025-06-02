@@ -23,6 +23,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'is_active',
     ];
 
     /**
@@ -45,6 +46,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
     }
     
@@ -60,20 +62,27 @@ class User extends Authenticatable
     }
     
     /**
-     * Check if the user is an admin.
-     *
-     * @return bool
-     */
-    public function isAdmin(): bool
-    {
-        return $this->hasRole('admin');
-    }
-    
-    /**
      * Get the projects that belong to the user.
      */
     public function projects(): HasMany
     {
         return $this->hasMany(Project::class);
+    }
+    
+    /**
+     * Check if the user is a manager.
+     */
+    public function isManager(): bool
+    {
+        return $this->hasRole('manager');
+    }
+
+    
+    /**
+     * Check if the user is a admin.
+     */
+    public function isAdmin(): bool
+    {
+        return $this->hasRole('admin');
     }
 }

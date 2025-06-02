@@ -20,15 +20,15 @@ class AISettingSeeder extends Seeder
             'is_active' => true,
             'is_default' => true,
             'models' => ['gpt-4', 'gpt-3.5-turbo'],
-            'capabilities' => [
-                'job_description',
-                'qualifying_questions',
-                'salary_comparison',
-                'search_strings',
-                'keywords',
-                'candidate_questions',
-                'recruiter_questions',
-            ],
+            // 'capabilities' => [
+            //     'job_description',
+            //     'qualifying_questions',
+            //     'salary_comparison',
+            //     'search_strings',
+            //     'keywords',
+            //     'candidate_questions',
+            //     'recruiter_questions',
+            // ],
         ]);
 
         AISetting::create([
@@ -38,10 +38,10 @@ class AISettingSeeder extends Seeder
             'is_active' => true,
             'is_default' => false,
             'models' => ['claude-3-opus', 'claude-3-sonnet'],
-            'capabilities' => [
-                'job_description',
-                'qualifying_questions',
-            ],
+            // 'capabilities' => [
+            //     'job_description',
+            //     'qualifying_questions',
+            // ],
         ]);
 
         AISetting::create([
@@ -51,9 +51,9 @@ class AISettingSeeder extends Seeder
             'is_active' => true,
             'is_default' => false,
             'models' => ['gemini-pro'],
-            'capabilities' => [
-                'job_description',
-            ],
+            // 'capabilities' => [
+            //     'job_description',
+            // ],
         ]);
     }
 }

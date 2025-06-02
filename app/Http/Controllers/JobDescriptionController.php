@@ -26,6 +26,7 @@ class JobDescriptionController extends Controller
     public function index(): View
     {
         $jobDescriptions = JobDescription::with('project')
+            ->where('user_id', Auth::id())
             ->orderBy('created_at', 'desc')
             ->paginate(10);
         
@@ -48,6 +49,7 @@ class JobDescriptionController extends Controller
         $this->authorize('view', $project);
         
         $jobDescriptions = $project->jobDescriptions()
+            ->where('user_id', Auth::id())
             ->orderBy('created_at', 'desc')
             ->paginate(10);
         
@@ -115,7 +117,8 @@ class JobDescriptionController extends Controller
     public function create(ModelRegistryService $modelRegistryService): View
     {
         // Get available projects
-        $projects = Project::orderBy('title')->get();
+        $projects = Project::orderBy('title')
+            ->where('user_id', Auth::id())->get();
         
         // Get available templates
         $templates = JobDescriptionTemplate::active()->get();

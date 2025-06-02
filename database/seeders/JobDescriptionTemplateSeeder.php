@@ -21,23 +21,29 @@ class JobDescriptionTemplateSeeder extends Seeder
         }
 
         // Create template categories
-        $techCategory = TemplateCategory::create([
-            'name' => 'Technology',
-            'slug' => 'technology',
-            'description' => 'Templates for technology and IT roles',
-        ]);
+        $techCategory = TemplateCategory::updateOrCreate(
+            ['slug' => 'technology'],
+            [
+                'name' => 'Technology',
+                'description' => 'Templates for technology and IT roles',
+            ]
+        );
 
-        $salesCategory = TemplateCategory::create([
-            'name' => 'Sales & Marketing',
-            'slug' => 'sales-marketing',
-            'description' => 'Templates for sales and marketing roles',
-        ]);
+        $salesCategory = TemplateCategory::updateOrCreate(
+            ['slug' => 'sales-marketing'],
+            [
+                'name' => 'Sales & Marketing',
+                'description' => 'Templates for sales and marketing roles',
+            ]
+        );
 
-        $financeCategory = TemplateCategory::create([
-            'name' => 'Finance & Accounting',
-            'slug' => 'finance-accounting',
-            'description' => 'Templates for finance and accounting roles',
-        ]);
+        $financeCategory = TemplateCategory::updateOrCreate(
+            ['slug' => 'finance-accounting'],
+            [
+                'name' => 'Finance & Accounting',
+                'description' => 'Templates for finance and accounting roles',
+            ]
+        );
 
         // Create job description templates
         $softwareEngineerTemplate = JobDescriptionTemplate::create([

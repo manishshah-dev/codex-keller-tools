@@ -2,7 +2,6 @@
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         <meta charset="utf-8">
-        <!-- <meta name="viewport" content="width=device-width, initial-scale=1"> -->
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
@@ -52,195 +51,39 @@
 
         <!-- JavaScript for sidebar toggle -->
         <script>
-            document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('DOMContentLoaded', function () {
                 const sidebar = document.getElementById('sidebar');
                 const sidebarToggle = document.getElementById('sidebar-toggle');
                 const sidebarClose = document.getElementById('sidebar-close');
                 const sidebarOverlay = document.getElementById('sidebar-overlay');
-                const mainContent = document.querySelector('.flex-1.flex.flex-col');
-
-                let isCollapsed = true; // Start collapsed by default
 
                 function toggleSidebar() {
-                    isCollapsed = !isCollapsed;
-                    
-                    if (window.innerWidth >= 1024) { // Desktop
-                        if (isCollapsed) {
-                            // Collapse sidebar
-                            sidebar.style.width = '80px';
-                            sidebar.setAttribute('data-collapsed', 'true');
-                            
-                            // Hide text elements
-                            const navTexts = sidebar.querySelectorAll('.nav-text');
-                            navTexts.forEach(text => {
-                                text.style.display = 'none';
-                            });
-                            
-                            // Center icons and adjust padding
-                            const navItems = sidebar.querySelectorAll('.nav-item');
-                            navItems.forEach(item => {
-                                item.style.justifyContent = 'center';
-                                item.style.paddingLeft = '1rem';
-                                item.style.paddingRight = '1rem';
-                            });
-                            
-                            // Hide logo text, show only icon
-                            const logoContainer = sidebar.querySelector('.flex.items-center');
-                            if (logoContainer) {
-                                logoContainer.style.justifyContent = 'center';
-                                const logo = logoContainer.querySelector('svg');
-                                if (logo) {
-                                    logo.style.width = '24px';
-                                    logo.style.height = '24px';
-                                }
-                            }
-                            
-                        } else {
-                            // Expand sidebar
-                            sidebar.style.width = '256px';
-                            sidebar.setAttribute('data-collapsed', 'false');
-                            
-                            // Show text elements
-                            const navTexts = sidebar.querySelectorAll('.nav-text');
-                            navTexts.forEach(text => {
-                                text.style.display = 'block';
-                            });
-                            
-                            // Reset nav items
-                            const navItems = sidebar.querySelectorAll('.nav-item');
-                            navItems.forEach(item => {
-                                item.style.justifyContent = '';
-                                item.style.paddingLeft = '';
-                                item.style.paddingRight = '';
-                            });
-                            
-                            // Reset logo
-                            const logoContainer = sidebar.querySelector('.flex.items-center');
-                            if (logoContainer) {
-                                logoContainer.style.justifyContent = '';
-                                const logo = logoContainer.querySelector('svg');
-                                if (logo) {
-                                    logo.style.width = '';
-                                    logo.style.height = '';
-                                }
-                            }
-                        }
-                    } else { // Mobile
-                        // Ensure text is always visible on mobile
-                        const navTexts = sidebar.querySelectorAll('.nav-text');
-                        navTexts.forEach(text => {
-                            text.style.display = 'block';
-                        });
-                        
-                        // Reset any desktop collapse styles
-                        const navItems = sidebar.querySelectorAll('.nav-item');
-                        navItems.forEach(item => {
-                            item.style.justifyContent = '';
-                            item.style.paddingLeft = '';
-                            item.style.paddingRight = '';
-                        });
-                        
-                        sidebar.style.width = '';
-                        sidebar.setAttribute('data-collapsed', 'false');
-                        
-                        if (isCollapsed) {
-                            sidebar.classList.add('-translate-x-full');
-                            sidebarOverlay.classList.add('hidden');
-                        } else {
-                            sidebar.classList.remove('-translate-x-full');
-                            sidebarOverlay.classList.remove('hidden');
-                        }
+                    const collapsed = sidebar.getAttribute('data-collapsed') === 'true';
+                    sidebar.setAttribute('data-collapsed', collapsed ? 'false' : 'true');
+                    if (window.innerWidth < 1024) {
+                        sidebar.classList.toggle('-translate-x-full');
+                        sidebarOverlay.classList.toggle('hidden');
                     }
                 }
 
                 function closeSidebarMobile() {
                     if (window.innerWidth < 1024) {
-                        isCollapsed = true;
                         sidebar.classList.add('-translate-x-full');
                         sidebarOverlay.classList.add('hidden');
                     }
                 }
 
-                // Initialize state based on screen size
+                // Start collapsed on both desktop and mobile
                 if (window.innerWidth < 1024) {
-                    // Mobile: start hidden
-                    isCollapsed = true;
                     sidebar.classList.add('-translate-x-full');
                     sidebarOverlay.classList.add('hidden');
                 } else {
-                    // Desktop: start collapsed
-                    isCollapsed = true;
-                    sidebar.style.width = '80px';
                     sidebar.setAttribute('data-collapsed', 'true');
-                    
-                    // Hide text elements
-                    const navTexts = sidebar.querySelectorAll('.nav-text');
-                    navTexts.forEach(text => {
-                        text.style.display = 'none';
-                    });
-                    
-                    // Center icons and adjust padding
-                    const navItems = sidebar.querySelectorAll('.nav-item');
-                    navItems.forEach(item => {
-                        item.style.justifyContent = 'center';
-                        item.style.paddingLeft = '1rem';
-                        item.style.paddingRight = '1rem';
-                    });
                 }
 
-                if (sidebarToggle) {
-                    sidebarToggle.addEventListener('click', toggleSidebar);
-                }
-                if (sidebarClose) sidebarClose.addEventListener('click', closeSidebarMobile);
-                if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebarMobile);
-
-                // Handle window resize
-                window.addEventListener('resize', function() {
-                    if (window.innerWidth >= 1024) {
-                        // Desktop mode
-                        sidebar.classList.remove('-translate-x-full');
-                        if (sidebarOverlay) sidebarOverlay.classList.add('hidden');
-                        
-                        // Apply desktop collapsed state if collapsed
-                        if (isCollapsed) {
-                            sidebar.style.width = '80px';
-                            sidebar.setAttribute('data-collapsed', 'true');
-                            
-                            const navTexts = sidebar.querySelectorAll('.nav-text');
-                            navTexts.forEach(text => {
-                                text.style.display = 'none';
-                            });
-                            
-                            const navItems = sidebar.querySelectorAll('.nav-item');
-                            navItems.forEach(item => {
-                                item.style.justifyContent = 'center';
-                                item.style.paddingLeft = '1rem';
-                                item.style.paddingRight = '1rem';
-                            });
-                        }
-                    } else {
-                        // Mobile mode
-                        // Reset desktop styles
-                        sidebar.style.width = '';
-                        sidebar.setAttribute('data-collapsed', 'false');
-                        
-                        const navTexts = sidebar.querySelectorAll('.nav-text');
-                        navTexts.forEach(text => {
-                            text.style.display = 'block';
-                        });
-                        
-                        const navItems = sidebar.querySelectorAll('.nav-item');
-                        navItems.forEach(item => {
-                            item.style.justifyContent = '';
-                            item.style.paddingLeft = '';
-                            item.style.paddingRight = '';
-                        });
-                        
-                        if (isCollapsed) {
-                            sidebar.classList.add('-translate-x-full');
-                        }
-                    }
-                });
+                sidebarToggle?.addEventListener('click', toggleSidebar);
+                sidebarClose?.addEventListener('click', closeSidebarMobile);
+                sidebarOverlay?.addEventListener('click', closeSidebarMobile);
             });
         </script>
 

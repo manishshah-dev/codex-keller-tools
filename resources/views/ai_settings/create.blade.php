@@ -95,58 +95,61 @@
         console.log('All Models Map:', allModelsMap); // Log the map
         console.log('Old Models:', oldModels); // Log old selections
 
-        // Function to populate models dropdown
-        function populateModelsDropdown() {
+        // Function to populate models dropdown based on selected provider
+        function populateModelsDropdown(selectedProvider = null) {
             modelsSelect.innerHTML = ''; // Clear existing options
             
-            // Flatten the map into a single list for the create view dropdown
-            let allModelsList = [];
-            for (const provider in allModelsMap) {
-                if (allModelsMap.hasOwnProperty(provider)) {
-                    allModelsMap[provider].forEach(model => {
-                        // Add provider prefix for clarity in the dropdown value/text
-                        allModelsList.push({ 
-                            id: `${provider}/${model}`, // e.g., openai/gpt-4o-mini
-                            text: `${model} (${provider})` // e.g., gpt-4o-mini (openai)
-                        });
-                    });
-                }
-            }
-            // Sort the flattened list alphabetically by text
-            allModelsList.sort((a, b) => a.text.localeCompare(b.text));
-
-            if (allModelsList.length === 0) {
-                console.log('No models found, adding placeholder.'); // Log empty case
+            if (!selectedProvider) {
+                // No provider selected, show placeholder
                 const defaultOption = document.createElement('option');
                 defaultOption.value = '';
-                defaultOption.textContent = 'Could not fetch model list';
+                defaultOption.textContent = 'Please select a provider first';
                 defaultOption.disabled = true;
                 modelsSelect.appendChild(defaultOption);
-                // Initialize Select2 even if empty, to show placeholder
-                $(modelsSelect).select2({ width: '100%', placeholder: 'Could not fetch model list' });
+                $(modelsSelect).select2({ width: '100%', placeholder: 'Please select a provider first' });
+                return;
+            }
+            
+            // Get models for the selected provider only
+            const providerModels = allModelsMap[selectedProvider] || [];
+            
+            if (providerModels.length === 0) {
+                console.log('No models found for provider:', selectedProvider);
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = 'No models available for this provider';
+                defaultOption.disabled = true;
+                modelsSelect.appendChild(defaultOption);
+                $(modelsSelect).select2({ width: '100%', placeholder: 'No models available' });
                 return;
             }
 
-            console.log(`Populating ${allModelsList.length} models...`); // Log loop start
-            allModelsList.forEach(modelInfo => {
-                // Check against the full ID (provider/model) if old value exists
-                const isSelected = oldModels.includes(modelInfo.id); 
+            // Add models for the selected provider
+            providerModels.forEach(model => {
+                const isSelected = oldModels.includes(model);
                 const option = document.createElement('option');
-                option.value = modelInfo.id; // Use the full ID as value
-                option.textContent = modelInfo.text; // Display formatted text
+                option.value = model; // Use just the model name as value
+                option.textContent = model; // Display model name
                 if (isSelected) {
                     option.selected = true;
                 }
                 modelsSelect.appendChild(option);
-                console.log(`Added model option: ${modelInfo.text} (Value: ${modelInfo.id})`); // Log each addition
             });
             
             // Initialize or update Select2 after populating
             $(modelsSelect).select2({ width: '100%', placeholder: 'Select models...' });
         }
 
+        // Listen for provider selection changes
+        const providerSelect = document.getElementById('provider');
+        providerSelect.addEventListener('change', function() {
+            const selectedProvider = this.value;
+            populateModelsDropdown(selectedProvider);
+        });
+
         // Initial population on page load
-        populateModelsDropdown();
+        const initialProvider = providerSelect.value;
+        populateModelsDropdown(initialProvider);
     });
 </script>
 

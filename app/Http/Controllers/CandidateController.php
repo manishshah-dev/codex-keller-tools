@@ -36,6 +36,7 @@ class CandidateController extends Controller
     public function index(): View
     {
         $candidates = Candidate::with('project')
+            ->where('user_id', Auth::id())
             ->orderBy('created_at', 'desc')
             ->paginate(10);
         

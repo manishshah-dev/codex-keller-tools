@@ -70,7 +70,30 @@
      padding: 0.5rem 0.75rem;
 }
 
-
 .header-container {
     background: linear-gradient(90deg, #235322 0%, #0C770A 100%);
+}
+
+
+/* Sidebar collapsed state */
+#sidebar[data-collapsed="true"] {
+    width: 80px;
+}
+/* Animate nav text */
+#sidebar .nav-text {
+    display: inline-block;
+    max-width: 160px;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: max-width 0.3s ease, opacity 0.3s ease, margin-left 0.3s ease;
+}
+#sidebar[data-collapsed="true"] .nav-text {
+    margin-left: 0;
+    max-width: 0;
+    opacity: 0;
+}
+#sidebar[data-collapsed="true"] .nav-item {
+    /* justify-content: center; */
+    padding-left: 1rem;
+    padding-right: 1rem;
 }

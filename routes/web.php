@@ -18,9 +18,13 @@ use App\Http\Controllers\CandidateController;
 use App\Http\Controllers\CandidateProfileController;
 use App\Http\Controllers\TrashController;
 use App\Http\Controllers\CandidateProfileSubmissionController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::view('/inactive', 'auth.inactive')->name('inactive');
+
+
+Route::middleware(['auth', 'verified', 'active'])->group(function () {
     // Dashboard
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     
@@ -98,8 +102,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/projects/{project}/analyzer/chat', [CandidateController::class, 'chat'])->name('projects.analyzer.chat');
     Route::post('/projects/{project}/candidates/import-workable', [CandidateController::class, 'importFromWorkable'])->name('projects.candidates.import-workable');
     Route::post('/projects/{project}/candidates/batch-upload', [CandidateController::class, 'batchUpload'])->name('projects.candidates.batch-upload');
-    // Temporarily disabled due to route conflict with shallow routing
-    // Route::post('/projects/{project}/candidates/batch-actions', [CandidateController::class, 'batchAction'])->name('projects.candidates.batch-action');
     
     // Project Requirements
     Route::post('/projects/{project}/requirements', [ProjectRequirementController::class, 'store'])->name('projects.requirements.store');
@@ -125,31 +127,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // Keywords
     Route::resource('projects.keywords', KeywordController::class)->shallow();
-    
-    // AI Settings (Admin only)
-    // Route::middleware(['can:manage-ai-settings'])->group(function () {
-        Route::get('/ai-settings', [AISettingController::class, 'index'])->name('ai-settings.index');
-        Route::get('/ai-settings/create', [AISettingController::class, 'create'])->name('ai-settings.create');
-        Route::post('/ai-settings', [AISettingController::class, 'store'])->name('ai-settings.store');
-        Route::get('/ai-settings/{aiSetting}/edit', [AISettingController::class, 'edit'])->name('ai-settings.edit');
-        Route::put('/ai-settings/{aiSetting}', [AISettingController::class, 'update'])->name('ai-settings.update');
-        Route::delete('/ai-settings/{aiSetting}', [AISettingController::class, 'destroy'])->name('ai-settings.destroy');
-        Route::post('/ai-settings/{aiSetting}/test-connection', [AISettingController::class, 'testConnection'])->name('ai-settings.test-connection');
         
-        // AI Prompts
-        Route::get('/ai-settings/prompts', [AISettingController::class, 'prompts'])->name('ai-settings.prompts');
-        Route::get('/ai-settings/prompts/create', [AISettingController::class, 'createPrompt'])->name('ai-settings.prompts.create');
-        Route::post('/ai-settings/prompts', [AISettingController::class, 'storePrompt'])->name('ai-settings.prompts.store');
-        Route::get('/ai-settings/prompts/{prompt}/edit', [AISettingController::class, 'editPrompt'])->name('ai-settings.prompts.edit');
-        Route::put('/ai-settings/prompts/{prompt}', [AISettingController::class, 'updatePrompt'])->name('ai-settings.prompts.update');
-        Route::delete('/ai-settings/prompts/{prompt}', [AISettingController::class, 'destroyPrompt'])->name('ai-settings.prompts.destroy');
-    // });
-    
     // User Profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     
+});
+
+// Admin Routes
+Route::middleware(['auth', 'verified', 'active', 'role:admin'])->group(function () {
+    // User Management (Admin only)
+    Route::get('/users', [UserController::class, 'index'])->name('users.index');
+    Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
+    Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
+    Route::patch('/users/{user}/activate', [UserController::class, 'activate'])->name('users.activate');
+    Route::patch('/users/{user}/deactivate', [UserController::class, 'deactivate'])->name('users.deactivate');
+
+    Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
+    Route::post('/users', [UserController::class, 'store'])->name('users.store');
+
     // Trash (Deleted Items)
     Route::get('/trash', [TrashController::class, 'index'])->name('trash.index');
     Route::post('/trash/projects/{id}/restore', [TrashController::class, 'restoreProject'])->name('trash.projects.restore');
@@ -174,6 +171,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // Bulk purge route
     Route::post('/trash/purge', [TrashController::class, 'purge'])->name('trash.purge')->middleware('can:manage-ai-settings');
+
+    // AI Settings (Admin only)
+    Route::get('/ai-settings', [AISettingController::class, 'index'])->name('ai-settings.index');
+    Route::get('/ai-settings/create', [AISettingController::class, 'create'])->name('ai-settings.create');
+    Route::post('/ai-settings', [AISettingController::class, 'store'])->name('ai-settings.store');
+    Route::get('/ai-settings/{aiSetting}/edit', [AISettingController::class, 'edit'])->name('ai-settings.edit');
+    Route::put('/ai-settings/{aiSetting}', [AISettingController::class, 'update'])->name('ai-settings.update');
+    Route::delete('/ai-settings/{aiSetting}', [AISettingController::class, 'destroy'])->name('ai-settings.destroy');
+    Route::post('/ai-settings/{aiSetting}/test-connection', [AISettingController::class, 'testConnection'])->name('ai-settings.test-connection');
+    
+    // AI Prompts
+    Route::get('/ai-settings/prompts', [AISettingController::class, 'prompts'])->name('ai-settings.prompts');
+    Route::get('/ai-settings/prompts/create', [AISettingController::class, 'createPrompt'])->name('ai-settings.prompts.create');
+    Route::post('/ai-settings/prompts', [AISettingController::class, 'storePrompt'])->name('ai-settings.prompts.store');
+    Route::get('/ai-settings/prompts/{prompt}/edit', [AISettingController::class, 'editPrompt'])->name('ai-settings.prompts.edit');
+    Route::put('/ai-settings/prompts/{prompt}', [AISettingController::class, 'updatePrompt'])->name('ai-settings.prompts.update');
+    Route::delete('/ai-settings/prompts/{prompt}', [AISettingController::class, 'destroyPrompt'])->name('ai-settings.prompts.destroy');
+
 });
 
 require __DIR__.'/auth.php';

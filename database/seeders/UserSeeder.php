@@ -14,19 +14,25 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         // Create admin user
-        User::create([
-            'name' => 'Admin User',
-            'email' => 'admin@example.com',
-            'password' => Hash::make('password'),
-            'role' => 'admin',
-        ]);
+        User::updateOrCreate(
+            ['email' => 'admin@example.com'], // Search criteria
+            [
+                'name' => 'Admin User',
+                'password' => Hash::make('password'),
+                'role' => 'admin',
+                'is_active' => true,
+            ]
+        );
 
         // Create regular user
-        User::create([
-            'name' => 'Test User',
-            'email' => 'user@example.com',
-            'password' => Hash::make('password'),
-            'role' => 'user',
-        ]);
+        User::updateOrCreate(
+            ['email' => 'manager@example.com'], // Search criteria
+            [
+                'name' => 'Test User',
+                'password' => Hash::make('password'),
+                'role' => 'manager',
+                'is_active' => true,
+            ]
+        );
     }
 }
