@@ -25,6 +25,8 @@ use Smalot\PdfParser\Parser;
 use PhpOffice\PhpWord\IOFactory;
 use App\Services\ModelRegistryService; // Import the service
 use App\Models\WorkableCandidate;
+use App\Services\WorkableService;
+use App\Models\WorkableSetting;
 use Symfony\Component\HttpFoundation\StreamedResponse; // For file response
 
 class CandidateController extends Controller
@@ -50,7 +52,8 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\View\View
      */
-    public function projectIndex(Project $project, ModelRegistryService $modelRegistryService): View
+
+    public function projectIndex(Project $project, ModelRegistryService $modelRegistryService, WorkableService $workableService): View // Inject service
     {
         $this->authorize('view', $project);
         
@@ -72,6 +75,7 @@ class CandidateController extends Controller
 
         // Fetch Workable candidates stored locally
         $workableCandidates = WorkableCandidate::orderBy('name')->get();
+
 
         return view('candidates.project_index', compact(
             'project',
@@ -612,7 +616,7 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\Http\RedirectResponse
      */
-    public function importFromWorkable(Request $request, Project $project): RedirectResponse
+   public function importFromWorkable(Request $request, Project $project): RedirectResponse
     {
         $this->authorize('update', $project);
 
