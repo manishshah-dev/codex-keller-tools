@@ -24,6 +24,7 @@ use Illuminate\Support\Str;
 use Smalot\PdfParser\Parser;
 use PhpOffice\PhpWord\IOFactory;
 use App\Services\ModelRegistryService; // Import the service
+use App\Models\WorkableCandidate;
 use Symfony\Component\HttpFoundation\StreamedResponse; // For file response
 
 class CandidateController extends Controller
@@ -49,7 +50,7 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\View\View
      */
-    public function projectIndex(Project $project, ModelRegistryService $modelRegistryService): View // Inject service
+    public function projectIndex(Project $project, ModelRegistryService $modelRegistryService): View
     {
         $this->authorize('view', $project);
         
@@ -69,13 +70,17 @@ class CandidateController extends Controller
         // Fetch the dynamic model map
         $providerModels = $modelRegistryService->getModels();
 
+        // Fetch Workable candidates stored locally
+        $workableCandidates = WorkableCandidate::orderBy('name')->get();
+
         return view('candidates.project_index', compact(
             'project',
             'candidates',
             'requirements',
             'aiSettings', // Pass settings
             'prompts',    // Pass prompts
-            'providerModels' // Pass model map
+            'providerModels', // Pass model map
+            'workableCandidates'
         ));
     }
     
@@ -610,15 +615,55 @@ class CandidateController extends Controller
     public function importFromWorkable(Request $request, Project $project): RedirectResponse
     {
         $this->authorize('update', $project);
-        
+
         $validated = $request->validate([
-            'workable_url' => 'required|url',
+            'workable_candidates' => 'required|array',
+            'workable_candidates.*' => 'string',
         ]);
-        
-        // TODO: Implement Workable integration
-        
-        return redirect()->route('projects.candidates.index', $project)
-            ->with('info', 'Workable import not yet implemented.'); // Changed to info
+
+        $imported = 0;
+        $failed = 0;
+
+        foreach ($validated['workable_candidates'] as $candidateId) {
+            $wc = WorkableCandidate::where('workable_id', $candidateId)->first();
+            if (!$wc) {
+                $failed++;
+                continue;
+            }
+
+            try {
+                $name = $wc->name;
+                [$first, $last] = array_pad(explode(' ', $name, 2), 2, null);
+
+                Candidate::firstOrCreate([
+                    'project_id' => $project->id,
+                    'workable_id' => $candidateId,
+                ], [
+                    'user_id' => Auth::id(),
+                    'first_name' => $first ?? 'Unknown',
+                    'last_name' => $last ?? '',
+                    'email' => $wc->email,
+                    'phone' => $wc->phone,
+                    'location' => null,
+                    'current_position' => $wc->job_title,
+                    'status' => 'new',
+                    'source' => 'workable',
+                ]);
+
+                $imported++;
+            } catch (\Exception $e) {
+                $failed++;
+                Log::error('Workable import error: ' . $e->getMessage());
+            }
+        }
+
+        $message = "Imported {$imported} candidate(s).";
+        if ($failed) {
+            $message .= " {$failed} failed.";
+            return redirect()->route('projects.candidates.index', $project)->with('warning', $message);
+        }
+
+        return redirect()->route('projects.candidates.index', $project)->with('success', $message);
     }
     
     /**
