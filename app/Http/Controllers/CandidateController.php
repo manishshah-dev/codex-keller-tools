@@ -24,6 +24,7 @@ use Illuminate\Support\Str;
 use Smalot\PdfParser\Parser;
 use PhpOffice\PhpWord\IOFactory;
 use App\Services\ModelRegistryService; // Import the service
+use App\Models\WorkableCandidate;
 use App\Services\WorkableService;
 use App\Models\WorkableSetting;
 use Symfony\Component\HttpFoundation\StreamedResponse; // For file response
@@ -51,6 +52,7 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\View\View
      */
+
     public function projectIndex(Project $project, ModelRegistryService $modelRegistryService, WorkableService $workableService): View // Inject service
     {
         $this->authorize('view', $project);
@@ -71,16 +73,9 @@ class CandidateController extends Controller
         // Fetch the dynamic model map
         $providerModels = $modelRegistryService->getModels();
 
-        // Fetch Workable candidates if settings available
-        $workableCandidates = [];
-        $workableSetting = WorkableSetting::where('is_active', true)->first();
-        if ($workableSetting) {
-            try {
-                $workableCandidates = $workableService->listCandidates($workableSetting);
-            } catch (\Exception $e) {
-                Log::error('Workable candidates fetch failed: ' . $e->getMessage());
-            }
-        }
+        // Fetch Workable candidates stored locally
+        $workableCandidates = WorkableCandidate::orderBy('name')->get();
+
 
         return view('candidates.project_index', compact(
             'project',
@@ -621,7 +616,7 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\Http\RedirectResponse
      */
-    public function importFromWorkable(Request $request, Project $project, WorkableService $workableService): RedirectResponse
+   public function importFromWorkable(Request $request, Project $project): RedirectResponse
     {
         $this->authorize('update', $project);
 
@@ -630,21 +625,18 @@ class CandidateController extends Controller
             'workable_candidates.*' => 'string',
         ]);
 
-        $setting = WorkableSetting::where('is_active', true)->first();
-        if (!$setting) {
-            return redirect()->route('projects.candidates.index', $project)
-                ->with('error', 'No active Workable settings found.');
-        }
-
         $imported = 0;
         $failed = 0;
 
         foreach ($validated['workable_candidates'] as $candidateId) {
-            try {
-                $data = $workableService->getCandidate($setting, $candidateId);
-                $info = $data['candidate'] ?? $data;
+            $wc = WorkableCandidate::where('workable_id', $candidateId)->first();
+            if (!$wc) {
+                $failed++;
+                continue;
+            }
 
-                $name = $info['name'] ?? '';
+            try {
+                $name = $wc->name;
                 [$first, $last] = array_pad(explode(' ', $name, 2), 2, null);
 
                 Candidate::firstOrCreate([
@@ -654,10 +646,10 @@ class CandidateController extends Controller
                     'user_id' => Auth::id(),
                     'first_name' => $first ?? 'Unknown',
                     'last_name' => $last ?? '',
-                    'email' => $info['email'] ?? null,
-                    'phone' => $info['phone'] ?? null,
-                    'location' => $info['address'] ?? null,
-                    'current_position' => $info['job']['title'] ?? null,
+                    'email' => $wc->email,
+                    'phone' => $wc->phone,
+                    'location' => null,
+                    'current_position' => $wc->job_title,
                     'status' => 'new',
                     'source' => 'workable',
                 ]);

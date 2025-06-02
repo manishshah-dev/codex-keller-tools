@@ -7,30 +7,16 @@ use Illuminate\Support\Facades\Http;
 
 class WorkableService
 {
-    /**
-     * Retrieve all candidates from Workable.
-     * Uses ?limit=100 for each request as recommended by Workable documentation.
-     * Handles HTTP 429 responses by waiting the suggested Retry-After seconds.
-     */
     public function listCandidates(WorkableSetting $setting): array
     {
         $candidates = [];
-        // start with limit=100 (maximum allowed per docs)
         $next = "https://{$setting->subdomain}.workable.com/spi/v3/candidates?limit=100";
-
 
         while ($next) {
             $response = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $setting->api_token,
                 'Accept' => 'application/json',
             ])->get($next);
-
-            if ($response->status() === 429) {
-                // simple rate limit handling based on Workable docs
-                $wait = (int) $response->header('Retry-After', 60);
-                sleep($wait);
-                continue; // retry the same request
-            }
 
             if ($response->failed()) {
                 throw new \Exception('Workable API error: ' . $response->body());
@@ -49,24 +35,65 @@ class WorkableService
     public function getCandidate(WorkableSetting $setting, string $id): array
     {
         $url = "https://{$setting->subdomain}.workable.com/spi/v3/candidates/{$id}";
+        $response = Http::withoutVerifying()->withHeaders([
+            'Authorization' => 'Bearer ' . $setting->api_token,
+            'Accept' => 'application/json',
+        ])->get($url);
 
-        while (true) {
+        if ($response->failed()) {
+            throw new \Exception('Workable API error: ' . $response->body());
+        }
+
+        return $response->json();
+    }
+
+    public function listJobs(WorkableSetting $setting): array
+    {
+        $jobs = [];
+        $next = "https://{$setting->subdomain}.workable.com/spi/v3/jobs?limit=100";
+
+        while ($next) {
             $response = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $setting->api_token,
                 'Accept' => 'application/json',
-            ])->get($url);
-
-            if ($response->status() === 429) {
-                $wait = (int) $response->header('Retry-After', 60);
-                sleep($wait);
-                continue;
-            }
+            ])->get($next);
 
             if ($response->failed()) {
                 throw new \Exception('Workable API error: ' . $response->body());
             }
 
-            return $response->json();
+            $data = $response->json();
+            foreach ($data['jobs'] ?? [] as $job) {
+                $jobs[] = $job;
+            }
+            $next = $data['paging']['next'] ?? null;
         }
+
+        return $jobs;
+    }
+
+    public function listJobCandidates(WorkableSetting $setting, string $jobId): array
+    {
+        $candidates = [];
+        $next = "https://{$setting->subdomain}.workable.com/spi/v3/jobs/{$jobId}/candidates?limit=100";
+
+        while ($next) {
+            $response = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $setting->api_token,
+                'Accept' => 'application/json',
+            ])->get($next);
+
+            if ($response->failed()) {
+                throw new \Exception('Workable API error: ' . $response->body());
+            }
+
+            $data = $response->json();
+            foreach ($data['candidates'] ?? [] as $candidate) {
+                $candidates[] = $candidate;
+            }
+            $next = $data['paging']['next'] ?? null;
+        }
+
+        return $candidates;
     }
 }

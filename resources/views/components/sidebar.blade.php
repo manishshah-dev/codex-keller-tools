@@ -55,6 +55,13 @@
                     <span class="nav-text whitespace-nowrap ml-3">{{ __('Workable Settings') }}</span>
                 </a>
 
+                <a href="{{ route('workable-jobs.index') }}" class="nav-item flex items-center px-4 py-3 text-sm font-medium rounded-lg {{ request()->routeIs('workable-jobs.*') ? 'bg-green-50 text-green-700 border-r-2 border-green-500' : 'text-gray-700 hover:bg-gray-50' }}" title="{{ __('Workable Jobs') }}">
+                    <svg class="nav-icon h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span class="nav-text whitespace-nowrap ml-3">{{ __('Workable Jobs') }}</span>
+                </a>
+
                 <a href="{{ route('users.index') }}" class="nav-item flex items-center px-4 py-3 text-sm font-medium rounded-lg {{ request()->routeIs('users.*') ? 'bg-green-50 text-green-700 border-r-2 border-green-500' : 'text-gray-700 hover:bg-gray-50' }}" title="{{ __('Users') }}">
                     <svg class="nav-icon h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />

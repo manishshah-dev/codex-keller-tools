@@ -110,13 +110,12 @@
                             
                             <form action="{{ route('projects.candidates.import-workable', $project) }}" method="POST" class="space-y-4">
                                 @csrf
-                                <div>
+                               <div>
                                     <x-input-label for="workable_candidates" :value="__('Select Candidates')" />
                                     <select id="workable_candidates" name="workable_candidates[]" multiple class="select2 block mt-1 w-full">
-                                        @foreach($workableCandidates ?? [] as $candidate)
-                                            @php $job = $candidate['job']['title'] ?? 'Unknown Job'; @endphp
-                                            <option value="{{ $candidate['id'] }}">
-                                                {{ $candidate['name'] }} - {{ $job }}
+                                        @foreach($workableCandidates as $candidate)
+                                            <option value="{{ $candidate->workable_id }}">
+                                                {{ $candidate->name }} - {{ $candidate->job_title }}
                                             </option>
                                         @endforeach
                                     </select>

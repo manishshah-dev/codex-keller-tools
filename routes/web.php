@@ -20,6 +20,7 @@ use App\Http\Controllers\TrashController;
 use App\Http\Controllers\CandidateProfileSubmissionController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkableSettingController;
+use App\Http\Controllers\WorkableJobController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/inactive', 'auth.inactive')->name('inactive');
@@ -192,6 +193,11 @@ Route::middleware(['auth', 'verified', 'active', 'role:admin'])->group(function 
 
     // Workable Settings
     Route::resource('workable-settings', WorkableSettingController::class)->except(['show']);
+
+    // Workable Jobs
+    Route::get('/workable-jobs', [WorkableJobController::class, 'index'])->name('workable-jobs.index');
+    Route::post('/workable-jobs/fetch', [WorkableJobController::class, 'fetch'])->name('workable-jobs.fetch');
+    Route::post('/workable-jobs/import-candidates', [WorkableJobController::class, 'importCandidates'])->name('workable-jobs.import-candidates');
 
 });
 
