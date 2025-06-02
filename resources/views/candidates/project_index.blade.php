@@ -111,11 +111,17 @@
                             <form action="{{ route('projects.candidates.import-workable', $project) }}" method="POST" class="space-y-4">
                                 @csrf
                                 <div>
-                                    <x-input-label for="workable_url" :value="__('Workable Job URL')" />
-                                    <x-text-input id="workable_url" class="block mt-1 w-full" type="text" name="workable_url" required />
-                                    <x-input-error :messages="$errors->get('workable_url')" class="mt-2" />
+                                    <x-input-label for="workable_candidates" :value="__('Select Candidates')" />
+                                    <select id="workable_candidates" name="workable_candidates[]" multiple class="select2 block mt-1 w-full">
+                                        @foreach($workableCandidates ?? [] as $candidate)
+                                            @php $job = $candidate['job']['title'] ?? 'Unknown Job'; @endphp
+                                            <option value="{{ $candidate['id'] }}">
+                                                {{ $candidate['name'] }} - {{ $job }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <x-input-error :messages="$errors->get('workable_candidates')" class="mt-2" />
                                 </div>
-                                
                                 <div class="flex justify-end">
                                     <x-primary-button>
                                         {{ __('Import Candidates') }}
@@ -375,6 +381,7 @@
         $('#analyze_ai_setting_id').select2({ width: '100%' });
         $('#analyze_ai_model').select2({ width: '100%' });
         $('#analyze_ai_prompt_id').select2({ width: '100%' });
+        $('#workable_candidates').select2({ width: '100%' });
 
     });
 </script>
