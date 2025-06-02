@@ -106,22 +106,54 @@
                         <!-- Workable Import -->
                         <div class="border border-gray-200 rounded-lg p-4">
                             <h4 class="font-medium mb-2">Import from Workable</h4>
-                            <p class="text-sm text-gray-600 mb-4">Import candidates directly from your Workable account.</p>
-                            
-                            <form action="{{ route('projects.candidates.import-workable', $project) }}" method="POST" class="space-y-4">
-                                @csrf
+                            <p class="text-sm text-gray-600 mb-4">Fetch candidates from your Workable account and import them.</p>
+
+                            <form method="GET" action="{{ route('projects.candidates.index', $project) }}" class="space-y-4">
+                                <input type="hidden" name="show_workable" value="1" />
                                 <div>
-                                    <x-input-label for="workable_url" :value="__('Workable Job URL')" />
-                                    <x-text-input id="workable_url" class="block mt-1 w-full" type="text" name="workable_url" required />
-                                    <x-input-error :messages="$errors->get('workable_url')" class="mt-2" />
+                                    <x-input-label for="workable_job_id" :value="__('Job')" />
+                                    <select id="workable_job_id" name="workable_job_id" class="block mt-1 w-full">
+                                        <option value="">All Jobs</option>
+                                        @foreach($workableJobs as $job)
+                                            <option value="{{ $job->id }}" @selected(request('workable_job_id') == $job->id)>
+                                                {{ $job->full_title ?? $job->title }}
+                                            </option>
+                                        @endforeach
+                                    </select>
                                 </div>
-                                
+                                <div>
+                                    <x-input-label for="candidate_email" :value="__('Candidate Email')" />
+                                    <input id="candidate_email" name="candidate_email" type="email" class="block mt-1 w-full" value="{{ request('candidate_email') }}" />
+                                </div>
+                                <div>
+                                    <x-input-label for="candidate_created_after" :value="__('Created After')" />
+                                    <input id="candidate_created_after" name="candidate_created_after" type="datetime-local" class="block mt-1 w-full" value="{{ request('candidate_created_after') }}" />
+                                </div>
                                 <div class="flex justify-end">
-                                    <x-primary-button>
-                                        {{ __('Import Candidates') }}
-                                    </x-primary-button>
+                                    <x-primary-button>{{ __('Fetch Candidates') }}</x-primary-button>
                                 </div>
                             </form>
+
+                            @if(count($workableCandidates) > 0)
+                                <form action="{{ route('projects.candidates.import-workable', $project) }}" method="POST" class="space-y-4 mt-4">
+                                    @csrf
+                                    <div>
+                                        <x-input-label for="workable_candidates" :value="__('Select Candidates')" />
+                                        <select id="workable_candidates" name="workable_candidates[]" multiple class="select2 block mt-1 w-full">
+                                            @foreach($workableCandidates as $candidate)
+                                                @php $job = $candidate['job']['title'] ?? 'Unknown Job'; @endphp
+                                                <option value="{{ $candidate['id'] }}">
+                                                    {{ $candidate['name'] }} - {{ $job }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <x-input-error :messages="$errors->get('workable_candidates')" class="mt-2" />
+                                    </div>
+                                    <div class="flex justify-end">
+                                        <x-primary-button>{{ __('Import Candidates') }}</x-primary-button>
+                                    </div>
+                                </form>
+                            @endif
                         </div>
                         
                         <!-- Batch Upload -->
@@ -375,6 +407,7 @@
         $('#analyze_ai_setting_id').select2({ width: '100%' });
         $('#analyze_ai_model').select2({ width: '100%' });
         $('#analyze_ai_prompt_id').select2({ width: '100%' });
+        $('#workable_candidates').select2({ width: '100%' });
 
     });
 </script>
