@@ -639,7 +639,7 @@ class CandidateController extends Controller
      * @param  \App\Models\Project  $project
      * @return \Illuminate\Http\RedirectResponse
      */
-    public function importFromWorkable(Request $request, Project $project, WorkableService $workableService): RedirectResponse
+     public function importFromWorkable(Request $request, Project $project, WorkableService $workableService): RedirectResponse
     {
         $this->authorize('update', $project);
 

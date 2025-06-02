@@ -132,7 +132,7 @@
                                 <div class="flex justify-end">
                                     <x-primary-button>{{ __('Fetch Candidates') }}</x-primary-button>
                                 </div>
-                            </form>
+                        </form>
 
                             @if(count($workableCandidates) > 0)
                                 <form action="{{ route('projects.candidates.import-workable', $project) }}" method="POST" class="space-y-4 mt-4">
