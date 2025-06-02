@@ -27,6 +27,7 @@ class AISetting extends Model
         'is_active',
         'is_default',
         'models',
+        'capabilities'
     ];
 
     /**
@@ -38,6 +39,7 @@ class AISetting extends Model
         'is_active' => 'boolean',
         'is_default' => 'boolean',
         'models' => 'json',
+        'capabilities' => 'json',
     ];
 
     /**
