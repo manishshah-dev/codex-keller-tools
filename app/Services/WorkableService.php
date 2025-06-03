@@ -8,59 +8,24 @@ use Illuminate\Support\Facades\Http;
 
 class WorkableService
 {
-    protected function sendRequest(WorkableSetting $setting, string $url, array $query = [])
-    {
-        $attempts = 0;
-
-        while (true) {
-            $response = Http::withoutVerifying()->withHeaders([
-                'Authorization' => 'Bearer ' . $setting->api_token,
-                'Accept' => 'application/json',
-            ])->get($url, $query);
-
-            if ($response->status() === 429 && $attempts < 5) {
-                $attempts++;
-                $retryAfter = (int) ($response->header('Retry-After', 1));
-                sleep(max($retryAfter, 1));
-                continue;
-            }
-
-            if ($response->failed()) {
-                throw new \Exception('Workable API error: ' . $response->body());
-            }
-
-            return $response;
-        }
-    }
-
-    public function listJobs(WorkableSetting $setting, array $params = []): array
-    {
-        $jobs = [];
-        $params['limit'] = 100;
-        $url = "https://{$setting->subdomain}.workable.com/spi/v3/jobs";
-        $next = $url . '?' . http_build_query($params);
-
-        while ($next) {
-            $response = $this->sendRequest($setting, $next);
-            $data = $response->json();
-            foreach ($data['jobs'] ?? [] as $job) {
-                $jobs[] = $job;
-            }
-            $next = $data['paging']['next'] ?? null;
-        }
-
-        return $jobs;
-    }
-
-    public function listCandidates(WorkableSetting $setting, array $params = []): array
+    public function listCandidates(WorkableSetting $setting, array $params=[]): array
     {
         $candidates = [];
         $params['limit'] = 100;
         $url = "https://{$setting->subdomain}.workable.com/spi/v3/candidates";
         $next = $url . '?' . http_build_query($params);
+        // dd($next);
 
         while ($next) {
-            $response = $this->sendRequest($setting, $next);
+            $response = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $setting->api_token,
+                'Accept' => 'application/json',
+            ])->get($next);
+
+            if ($response->failed()) {
+                throw new \Exception('Workable API error: ' . $response->body());
+            }
+
             $data = $response->json();
             foreach ($data['candidates'] ?? [] as $candidate) {
                 $candidates[] = $candidate;
@@ -84,5 +49,56 @@ class WorkableService
         }
 
         return $response->json();
+    }
+
+    public function listJobs(WorkableSetting $setting): array
+    {
+        $jobs = [];
+        $next = "https://{$setting->subdomain}.workable.com/spi/v3/jobs?limit=100";
+
+        while ($next) {
+            $response = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $setting->api_token,
+                'Accept' => 'application/json',
+            ])->get($next);
+
+            if ($response->failed()) {
+                throw new \Exception('Workable API error: ' . $response->body());
+            }
+
+            $data = $response->json();
+            foreach ($data['jobs'] ?? [] as $job) {
+                $jobs[] = $job;
+            }
+            $next = $data['paging']['next'] ?? null;
+        }
+
+        return $jobs;
+    }
+
+    public function listJobCandidates(WorkableSetting $setting, string $job_shortcode): array
+    {
+        $candidates = [];
+        // $next = "https://{$setting->subdomain}.workable.com/spi/v3/jobs/{$job_shortcode}/candidates?limit=100";
+        $next = "https://{$setting->subdomain}.workable.com/spi/v3/candidates/{$id}?shortcode={$job_shortcode}&limit=100";
+
+        while ($next) {
+            $response = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $setting->api_token,
+                'Accept' => 'application/json',
+            ])->get($next);
+
+            if ($response->failed()) {
+                throw new \Exception('Workable API error: ' . $response->body());
+            }
+
+            $data = $response->json();
+            foreach ($data['candidates'] ?? [] as $candidate) {
+                $candidates[] = $candidate;
+            }
+            $next = $data['paging']['next'] ?? null;
+        }
+
+        return $candidates;
     }
 }

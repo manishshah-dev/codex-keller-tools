@@ -26,6 +26,7 @@ class WorkableJobController extends Controller
         }
 
         $jobs = $service->listJobs($setting);
+
         foreach ($jobs as $job) {
             WorkableJob::updateOrCreate(
                 ['workable_id' => $job['id']],
@@ -36,7 +37,7 @@ class WorkableJobController extends Controller
                     'country' => $job['location']['country'] ?? null,
                     'city' => $job['location']['city'] ?? null,
                     'url' => $job['url'] ?? null,
-                    'raw' => $job,
+                    'state' => $job['state'],
                     'job_created_at' => $job['created_at'] ?? null,
                 ]
             );

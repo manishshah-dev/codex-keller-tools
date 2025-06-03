@@ -18,6 +18,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 // Removed duplicate Auth import
 // Removed duplicate imports below
@@ -79,9 +80,9 @@ class CandidateController extends Controller
 
         $workableCandidates = [];
         $workableSetting = WorkableSetting::where('is_active', true)->first();
-        if ($workableSetting && $request->query('job')) {
+        if ($workableSetting && $request->query('workable_job')) {
             try {
-                $job = WorkableJob::find($request->query('job'));
+                $job = WorkableJob::find($request->query('workable_job'));
                 if ($job) {
                     $params = [
                         'shortcode' => $job->shortcode,
@@ -104,9 +105,9 @@ class CandidateController extends Controller
             'project',
             'candidates',
             'requirements',
-            'aiSettings', // Pass settings
-            'prompts',    // Pass prompts
-            'providerModels', // Pass model map
+            'aiSettings',
+            'prompts',
+            'providerModels',
             'workableCandidates',
             'departments',
             'countries',
@@ -665,28 +666,126 @@ class CandidateController extends Controller
                 $data = $workableService->getCandidate($setting, $candidateId);
                 $info = $data['candidate'] ?? $data;
 
+                // Extract name information
                 $name = $info['name'] ?? '';
-                [$first, $last] = array_pad(explode(' ', $name, 2), 2, null);
+                $firstName = $info['firstname'] ?? '';
+                $lastName = $info['lastname'] ?? '';
+                
+                // If firstname/lastname are not provided, parse from full name
+                if (empty($firstName) && empty($lastName) && !empty($name)) {
+                    [$firstName, $lastName] = array_pad(explode(' ', $name, 2), 2, '');
+                }
 
+                // Extract location information
+                $location = null;
+                if (isset($info['location']['location_str'])) {
+                    $location = $info['location']['location_str'];
+                } elseif (isset($info['address'])) {
+                    $location = $info['address'];
+                }
+
+                // Extract LinkedIn URL from social profiles
+                $linkedinUrl = null;
+                if (isset($info['social_profiles']) && is_array($info['social_profiles'])) {
+                    foreach ($info['social_profiles'] as $profile) {
+                        if (isset($profile['type']) && $profile['type'] === 'linkedin' && isset($profile['url'])) {
+                            $linkedinUrl = $profile['url'];
+                            break;
+                        }
+                    }
+                }
+
+                // Extract current company from experience entries (most recent)
+                $currentCompany = null;
+                if (isset($info['experience_entries']) && is_array($info['experience_entries']) && !empty($info['experience_entries'])) {
+                    // Get the most recent experience (assuming they're ordered)
+                    $recentExperience = $info['experience_entries'][0];
+                    $currentCompany = $recentExperience['company'] ?? null;
+                }
+
+                // Prepare comprehensive parsed data from Workable
+                $workableParsedData = [
+                    'workable_id' => $info['id'] ?? $candidateId,
+                    'workable_profile_url' => $info['profile_url'] ?? null,
+                    'headline' => $info['headline'] ?? null,
+                    'image_url' => $info['image_url'] ?? null,
+                    'stage' => $info['stage'] ?? null,
+                    'stage_kind' => $info['stage_kind'] ?? null,
+                    'disqualified' => $info['disqualified'] ?? false,
+                    'disqualified_at' => $info['disqualified_at'] ?? null,
+                    'withdrew' => $info['withdrew'] ?? false,
+                    'disqualification_reason' => $info['disqualification_reason'] ?? null,
+                    'hired_at' => $info['hired_at'] ?? null,
+                    'sourced' => $info['sourced'] ?? false,
+                    'domain' => $info['domain'] ?? null,
+                    'cover_letter' => $info['cover_letter'] ?? null,
+                    'summary' => $info['summary'] ?? null,
+                    'resume_url' => $info['resume_url'] ?? null,
+                    'education_entries' => $info['education_entries'] ?? [],
+                    'experience_entries' => $info['experience_entries'] ?? [],
+                    'skills' => $info['skills'] ?? [],
+                    'answers' => $info['answers'] ?? [],
+                    'social_profiles' => $info['social_profiles'] ?? [],
+                    'tags' => $info['tags'] ?? [],
+                    'location_details' => $info['location'] ?? null,
+                    'job_details' => $info['job'] ?? null,
+                    'account_details' => $info['account'] ?? null,
+                ];
+
+                // Determine status based on Workable stage
+                $status = 'new';
+                if (isset($info['stage_kind'])) {
+                    $status = match($info['stage_kind']) {
+                        'applied' => 'new',
+                        'sourced' => 'contacted',
+                        'interviewing' => 'interviewing',
+                        'offered' => 'offered',
+                        'hired' => 'hired',
+                        'disqualified', 'rejected' => 'rejected',
+                        'withdrawn' => 'withdrawn',
+                        default => 'new',
+                    };
+                }
+
+                // Download and store resume if available
+                $resumePath = null;
+                $resumeText = null;
+                if (isset($info['resume_url']) && !empty($info['resume_url'])) {
+                    try {
+                        $resumeData = $this->downloadAndStoreResume($info['resume_url'], $candidateId, $project->id, $firstName, $lastName);
+                        $resumePath = $resumeData['path'] ?? null;
+                        $resumeText = $resumeData['text'] ?? null;
+                    } catch (\Exception $e) {
+                        Log::warning('Failed to download resume for candidate ' . $candidateId . ': ' . $e->getMessage());
+                    }
+                }
+
+                // Create or update candidate
                 Candidate::firstOrCreate([
                     'project_id' => $project->id,
                     'workable_id' => $candidateId,
                 ], [
                     'user_id' => Auth::id(),
-                    'first_name' => $first ?? 'Unknown',
-                    'last_name' => $last ?? '',
+                    'first_name' => $firstName ?: 'Unknown',
+                    'last_name' => $lastName ?: '',
                     'email' => $info['email'] ?? null,
                     'phone' => $info['phone'] ?? null,
-                    'location' => $info['address'] ?? null,
+                    'location' => $location,
+                    'current_company' => $currentCompany,
                     'current_position' => $info['job']['title'] ?? null,
-                    'status' => 'new',
+                    'linkedin_url' => $linkedinUrl,
+                    'status' => $status,
                     'source' => 'workable',
+                    'workable_url' => $info['profile_url'] ?? null,
+                    'resume_path' => $resumePath,
+                    'resume_text' => $resumeText,
+                    'resume_parsed_data' => $workableParsedData,
                 ]);
 
                 $imported++;
             } catch (\Exception $e) {
                 $failed++;
-                Log::error('Workable import error: ' . $e->getMessage());
+                Log::error('Workable import error for candidate ' . $candidateId . ': ' . $e->getMessage());
             }
         }
 
@@ -698,6 +797,139 @@ class CandidateController extends Controller
 
         return redirect()->route('projects.candidates.index', $project)->with('success', $message);
     }
+
+    /**
+     * Download and store resume from Workable URL.
+     *
+     * @param string $resumeUrl
+     * @param string $candidateId
+     * @param string $firstName
+     * @param string $lastName
+     * @return array
+     * @throws \Exception
+     */
+    private function downloadAndStoreResume(string $resumeUrl, string $candidateId, string $projectId, string $firstName, string $lastName): array
+    {
+        // Extract file extension from URL (before query parameters)
+        $urlPath = parse_url($resumeUrl, PHP_URL_PATH);
+        $extension = strtolower(pathinfo($urlPath, PATHINFO_EXTENSION)) ?: 'pdf';
+        
+        // Create a safe filename
+        $safeName = Str::slug($firstName . '-' . $lastName . '-' . $candidateId . '-' . uniqid());
+        $filename = $safeName . '.' . $extension;
+        
+        // Try downloading with Laravel HTTP client first
+        $fileContent = null;
+        $downloadMethod = 'http_client';
+        
+        try {
+            $response = Http::withHeaders([
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept' => 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*',
+                'Accept-Encoding' => 'gzip, deflate',
+                'Connection' => 'keep-alive',
+            ])
+            ->withoutVerifying()
+            ->timeout(60)
+            ->retry(3, 1000)
+            ->get($resumeUrl);
+            
+            if ($response->successful()) {
+                $fileContent = $response->body();
+            } else {
+                Log::warning('HTTP client failed, trying cURL fallback', [
+                    'candidate_id' => $candidateId,
+                    'status' => $response->status()
+                ]);
+                throw new \Exception('HTTP client failed with status: ' . $response->status());
+            }
+        } catch (\Exception $e) {
+            // Fallback to cURL if HTTP client fails
+            Log::info('Trying cURL fallback for candidate ' . $candidateId);
+            $downloadMethod = 'curl';
+            
+            $fileContent = $this->downloadWithCurl($resumeUrl);
+            
+            if ($fileContent === false) {
+                Log::error('Both HTTP client and cURL failed to download resume', [
+                    'candidate_id' => $candidateId,
+                    'url' => $resumeUrl,
+                    'http_error' => $e->getMessage()
+                ]);
+                throw new \Exception('Failed to download resume with both HTTP client and cURL');
+            }
+        }
+        
+        // Validate that we got actual file content
+        if (empty($fileContent)) {
+            throw new \Exception('Downloaded file is empty');
+        }
+        
+        // Check if it's actually a PDF by looking at file signature
+        if ($extension === 'pdf' && !str_starts_with($fileContent, '%PDF')) {
+            Log::warning('Downloaded file does not appear to be a valid PDF', [
+                'candidate_id' => $candidateId,
+                'first_bytes' => bin2hex(substr($fileContent, 0, 20))
+            ]);
+        }
+        
+        Log::info('Successfully downloaded resume for candidate ' . $candidateId, [
+            'size' => strlen($fileContent),
+            'extension' => $extension,
+            'filename' => $filename,
+            'method' => $downloadMethod,
+            'url' => $resumeUrl,
+            'first_bytes' => bin2hex(substr($fileContent, 0, 10))
+        ]);
+        
+        // Store the file
+        $path = 'resumes/project_' . $projectId . '/user_' . Auth::id() . '/' . $filename;
+        Storage::disk('private')->put($path, $fileContent);
+        
+        // Extract text from the resume using existing method
+        $resumeText = null;
+        try {
+            // Create a temporary file to use with the existing extractTextFromResume method
+            $tempPath = tempnam(sys_get_temp_dir(), 'workable_resume_');
+            $tempFile = $tempPath . '.' . $extension;
+            file_put_contents($tempFile, $fileContent);
+            
+            // Create a mock UploadedFile-like object
+            $mockFile = new class($tempFile, $extension) {
+                private $path;
+                private $extension;
+                
+                public function __construct($path, $extension) {
+                    $this->path = $path;
+                    $this->extension = $extension;
+                }
+                
+                public function getPathname() {
+                    return $this->path;
+                }
+                
+                public function getClientOriginalExtension() {
+                    return $this->extension;
+                }
+            };
+            
+            $resumeText = $this->extractTextFromResume($mockFile);
+            
+            // Clean up temporary file
+            unlink($tempFile);
+            if (file_exists($tempPath)) {
+                unlink($tempPath);
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to extract text from resume for candidate ' . $candidateId . ': ' . $e->getMessage());
+        }
+        
+        return [
+            'path' => $path,
+            'text' => $resumeText,
+        ];
+    }
+
     
     /**
      * Batch upload resumes.
@@ -811,26 +1043,27 @@ class CandidateController extends Controller
                 }
                 return trim($text);
             } elseif ($extension === 'doc') {
-                 // Basic DOC handling (might not work for all .doc files)
-                 // Consider suggesting users save as DOCX or PDF for better results
-                 if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-                     // Attempt using COM object on Windows
-                     try {
-                         $word = new \COM('Word.Application');
-                         $word->Visible = false;
-                         $word->Documents->Open($filePath);
-                         $text = $word->ActiveDocument->Content->Text;
-                         $word->ActiveDocument->Close(false);
-                         $word->Quit();
-                         unset($word);
-                         return $text;
-                     } catch (\Exception $comE) {
-                          // Fallback to basic read if COM fails
-                          return file_get_contents($filePath);
+                 // Basic DOC handling - limited support
+                 // Note: .doc files are binary format and text extraction is limited
+                 // Recommend users to save as DOCX or PDF for better results
+                 try {
+                     $content = file_get_contents($filePath);
+                     // Try to extract readable text from binary content
+                     // This is a basic approach and may not work perfectly
+                     $text = '';
+                     if ($content !== false) {
+                         // Remove null bytes and control characters
+                         $content = str_replace(["\x00", "\x01", "\x02", "\x03", "\x04", "\x05", "\x06", "\x07", "\x08", "\x0B", "\x0C", "\x0E", "\x0F"], '', $content);
+                         // Extract printable characters
+                         $text = preg_replace('/[^\x20-\x7E\x0A\x0D]/', ' ', $content);
+                         // Clean up multiple spaces
+                         $text = preg_replace('/\s+/', ' ', $text);
+                         $text = trim($text);
                      }
-                 } else {
-                      // Basic fallback for non-Windows (likely won't extract clean text)
-                      return file_get_contents($filePath);
+                     return $text ?: 'Unable to extract text from DOC file. Please convert to PDF or DOCX for better results.';
+                 } catch (\Exception $e) {
+                     Log::warning('Failed to extract text from DOC file: ' . $e->getMessage());
+                     return 'Unable to extract text from DOC file. Please convert to PDF or DOCX for better results.';
                  }
             }
         } catch (\Exception $e) {
@@ -1398,5 +1631,60 @@ class CandidateController extends Controller
             return redirect()->route('projects.candidates.index', $project)
                 ->with('error', "Failed to {$action} candidates: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Download file using cURL as fallback method.
+     *
+     * @param string $url
+     * @return string|false
+     */
+    private function downloadWithCurl(string $url)
+    {
+        $ch = curl_init();
+        
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_TIMEOUT => 60,
+            CURLOPT_CONNECTTIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*',
+                'Accept-Language: en-US,en;q=0.9',
+                'Accept-Encoding: gzip, deflate',
+                'Connection: keep-alive',
+                'Cache-Control: no-cache',
+            ],
+        ]);
+        
+        $data = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        
+        curl_close($ch);
+        
+        if ($data === false || !empty($error)) {
+            Log::error('cURL download failed', [
+                'url' => $url,
+                'error' => $error,
+                'http_code' => $httpCode
+            ]);
+            return false;
+        }
+        
+        if ($httpCode !== 200) {
+            Log::error('cURL download failed with HTTP code', [
+                'url' => $url,
+                'http_code' => $httpCode
+            ]);
+            return false;
+        }
+        
+        return $data;
     }
 }

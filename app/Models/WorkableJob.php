@@ -17,12 +17,10 @@ class WorkableJob extends Model
         'country',
         'city',
         'url',
-        'raw',
         'job_created_at',
     ];
 
     protected $casts = [
-        'raw' => 'array',
         'job_created_at' => 'datetime',
     ];
 }

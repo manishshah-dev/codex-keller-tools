@@ -32,6 +32,7 @@ class Candidate extends Model
         'resume_text',
         'resume_parsed_data',
         'match_score',
+        'analysis_details',
         'status',
         'source',
         'workable_id',
@@ -130,6 +131,18 @@ class Candidate extends Model
     }
 
     /**
+     * Get the candidate's resume URL.
+     */
+    public function getResumeUrlAttribute(): ?string
+    {
+        if ($this->resume_path) {
+            return asset('storage/' . $this->resume_path);
+        }
+        
+        return null;
+    }
+
+    /**
      * Get the candidate's status badge class.
      */
     public function getStatusBadgeClassAttribute(): string
@@ -148,6 +161,20 @@ class Candidate extends Model
             default => 'bg-gray-100 text-gray-800',
         };
     }
+
+
+    /**
+     * Get the candidate's source badge class.
+    */
+    public function getSourceBadgeClassAttribute(): string
+    {
+        return match($this->source) {
+            'workable' => 'bg-green-100 text-green-800',
+            'manual' => 'bg-yellow-100 text-yellow-800',
+            default => 'bg-yellow-100 text-yellow-800',
+        };
+    }
+
 
     /**
      * Get the candidate's match score as a percentage.
