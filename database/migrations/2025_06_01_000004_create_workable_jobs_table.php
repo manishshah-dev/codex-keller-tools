@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('country')->nullable();
             $table->string('city')->nullable();
             $table->string('url')->nullable();
-            $table->json('raw')->nullable();
+            $table->string('state')->default('published');
             $table->timestamp('job_created_at')->nullable();
             $table->timestamps();
         });

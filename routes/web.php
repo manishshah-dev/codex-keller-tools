@@ -107,7 +107,7 @@ Route::middleware(['auth', 'verified', 'active'])->group(function () {
 
     // Workable Jobs
     Route::get('/workable-jobs', [WorkableJobController::class, 'index'])->name('workable-jobs.index');
-    Route::post('/workable-jobs/fetch', [WorkableJobController::class, 'fetch'])->name('workable-jobs.fetch');
+    Route::get('/workable-jobs/fetch', [WorkableJobController::class, 'fetch'])->name('workable-jobs.fetch');
     
     // Project Requirements
     Route::post('/projects/{project}/requirements', [ProjectRequirementController::class, 'store'])->name('projects.requirements.store');

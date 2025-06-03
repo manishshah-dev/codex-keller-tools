@@ -28,6 +28,7 @@
                                 <th class="py-2 px-4 text-left">Title</th>
                                 <th class="py-2 px-4 text-left">Department</th>
                                 <th class="py-2 px-4 text-left">Country</th>
+                                <th class="py-2 px-4 text-left">Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -36,6 +37,7 @@
                                     <td class="py-2 px-4 border-b">{{ $job->title }}</td>
                                     <td class="py-2 px-4 border-b">{{ $job->department }}</td>
                                     <td class="py-2 px-4 border-b">{{ $job->country }}</td>
+                                    <td class="py-2 px-4 border-b">{{ $job->state }}</td>
                                 </tr>
                             @endforeach
                         </tbody>

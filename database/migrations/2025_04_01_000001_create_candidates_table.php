@@ -39,6 +39,7 @@ return new class extends Migration
             $table->string('status')->default('new'); // new, contacted, interviewing, offered, hired, rejected, withdrawn
             $table->string('source')->default('manual'); // manual, workable, etc.
             $table->string('workable_id')->nullable();
+            $table->string('workable_url')->nullable();
             $table->text('notes')->nullable();
             $table->timestamp('last_analyzed_at')->nullable();
             
