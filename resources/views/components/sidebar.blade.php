@@ -1,4 +1,4 @@
-<div id="sidebar" class="fixed top-16 bottom-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-all duration-300 ease-in-out lg:static lg:inset-0 lg:top-0 -translate-x-full lg:translate-x-0" data-collapsed="true">
+<div id="sidebar" class="fixed top-16 bottom-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-all duration-300 ease-in-out lg:static lg:inset-0 lg:top-0 -translate-x-full lg:translate-x-0" data-collapsed="false">
     <div class="flex flex-col h-full">
         
         <!-- Sidebar Navigation -->

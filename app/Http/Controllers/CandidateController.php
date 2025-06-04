@@ -798,6 +798,27 @@ class CandidateController extends Controller
         return redirect()->route('projects.candidates.index', $project)->with('success', $message);
     }
 
+
+    /**
+     * Serve the resume file via a signed URL for public preview.
+     */
+    public function publicResume(Candidate $candidate)
+    {
+        if (!$candidate->resume_path || !Storage::disk('private')->exists($candidate->resume_path)) {
+            abort(404);
+        }
+
+        $filename = basename($candidate->resume_path);
+        $mimeType = Storage::disk('private')->mimeType($candidate->resume_path);
+
+        return Storage::disk('private')->response($candidate->resume_path, $filename, [
+            'Content-Type' => $mimeType,
+            'Content-Disposition' => 'inline; filename="' . $filename . '"'
+        ]);
+
+    }
+
+    
     /**
      * Download and store resume from Workable URL.
      *

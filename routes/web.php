@@ -1,22 +1,22 @@
 <?php
 
-use App\Http\Controllers\AiQuestionController;
 use App\Http\Controllers\AISettingController;
-use App\Http\Controllers\CompanyResearchController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\IntakeFormController;
 use App\Http\Controllers\JobDescriptionController;
 use App\Http\Controllers\JobDescriptionTemplateController;
-use App\Http\Controllers\KeywordController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectRequirementController;
-use App\Http\Controllers\QualifyingQuestionController;
-use App\Http\Controllers\SalaryComparisonController;
-use App\Http\Controllers\SearchStringController;
+// use App\Http\Controllers\KeywordController;
+// use App\Http\Controllers\AiQuestionController;
+// use App\Http\Controllers\CompanyResearchController;
+// use App\Http\Controllers\IntakeFormController;
+// use App\Http\Controllers\QualifyingQuestionController;
+// use App\Http\Controllers\SalaryComparisonController;
+// use App\Http\Controllers\SearchStringController;
 use App\Http\Controllers\CandidateController;
-use App\Http\Controllers\CandidateProfileController;
 use App\Http\Controllers\TrashController;
+use App\Http\Controllers\CandidateProfileController;
 use App\Http\Controllers\CandidateProfileSubmissionController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkableSettingController;
@@ -24,7 +24,7 @@ use App\Http\Controllers\WorkableJobController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/inactive', 'auth.inactive')->name('inactive');
-
+Route::get('/candidates/{candidate}/resume/public', [CandidateController::class, 'publicResume'])->name('candidates.resume.public')->middleware('signed');
 
 Route::middleware(['auth', 'verified', 'active'])->group(function () {
     // Dashboard
@@ -34,12 +34,12 @@ Route::middleware(['auth', 'verified', 'active'])->group(function () {
     Route::resource('projects', ProjectController::class);
     
     // Intake Forms
-    Route::get('/projects/{project}/intake-form', [IntakeFormController::class, 'show'])->name('projects.intake_forms.show');
-    Route::get('/projects/{project}/intake-form/create', [IntakeFormController::class, 'create'])->name('projects.intake_forms.create');
-    Route::post('/projects/{project}/intake-form', [IntakeFormController::class, 'store'])->name('projects.intake_forms.store');
-    Route::get('/projects/{project}/intake-form/edit', [IntakeFormController::class, 'edit'])->name('projects.intake_forms.edit');
-    Route::put('/projects/{project}/intake-form', [IntakeFormController::class, 'update'])->name('projects.intake_forms.update');
-    Route::delete('/projects/{project}/intake-form', [IntakeFormController::class, 'destroy'])->name('projects.intake_forms.destroy');
+    // Route::get('/projects/{project}/intake-form', [IntakeFormController::class, 'show'])->name('projects.intake_forms.show');
+    // Route::get('/projects/{project}/intake-form/create', [IntakeFormController::class, 'create'])->name('projects.intake_forms.create');
+    // Route::post('/projects/{project}/intake-form', [IntakeFormController::class, 'store'])->name('projects.intake_forms.store');
+    // Route::get('/projects/{project}/intake-form/edit', [IntakeFormController::class, 'edit'])->name('projects.intake_forms.edit');
+    // Route::put('/projects/{project}/intake-form', [IntakeFormController::class, 'update'])->name('projects.intake_forms.update');
+    // Route::delete('/projects/{project}/intake-form', [IntakeFormController::class, 'destroy'])->name('projects.intake_forms.destroy');
     
     // Job Descriptions (Project-specific routes)
     Route::get('/projects/{project}/job-descriptions', [JobDescriptionController::class, 'projectIndex'])->name('projects.job_descriptions.index');
@@ -58,7 +58,7 @@ Route::middleware(['auth', 'verified', 'active'])->group(function () {
     Route::get('/job-descriptions/{jobDescription}/export', [JobDescriptionController::class, 'export'])->name('job-descriptions.export');
     
     // Qualifying Questions
-    Route::resource('job-descriptions.qualifying-questions', QualifyingQuestionController::class)->except(['index', 'show']);
+    // Route::resource('job-descriptions.qualifying-questions', QualifyingQuestionController::class)->except(['index', 'show']);
     
     // Job Description Templates
     Route::resource('job-description-templates', JobDescriptionTemplateController::class);
@@ -73,21 +73,21 @@ Route::middleware(['auth', 'verified', 'active'])->group(function () {
     Route::get('/candidates/{candidate}/resume/download', [CandidateController::class, 'downloadResume'])->name('candidates.resume.download'); // Route for downloading resume
     
     // Company Research
-    Route::get('/projects/{project}/company-research', [CompanyResearchController::class, 'show'])->name('projects.company_research.show');
-    Route::get('/projects/{project}/company-research/create', [CompanyResearchController::class, 'create'])->name('projects.company_research.create');
-    Route::post('/projects/{project}/company-research', [CompanyResearchController::class, 'store'])->name('projects.company_research.store');
-    Route::get('/projects/{project}/company-research/edit', [CompanyResearchController::class, 'edit'])->name('projects.company_research.edit');
-    Route::put('/projects/{project}/company-research', [CompanyResearchController::class, 'update'])->name('projects.company_research.update');
-    Route::delete('/projects/{project}/company-research', [CompanyResearchController::class, 'destroy'])->name('projects.company_research.destroy');
+    // Route::get('/projects/{project}/company-research', [CompanyResearchController::class, 'show'])->name('projects.company_research.show');
+    // Route::get('/projects/{project}/company-research/create', [CompanyResearchController::class, 'create'])->name('projects.company_research.create');
+    // Route::post('/projects/{project}/company-research', [CompanyResearchController::class, 'store'])->name('projects.company_research.store');
+    // Route::get('/projects/{project}/company-research/edit', [CompanyResearchController::class, 'edit'])->name('projects.company_research.edit');
+    // Route::put('/projects/{project}/company-research', [CompanyResearchController::class, 'update'])->name('projects.company_research.update');
+    // Route::delete('/projects/{project}/company-research', [CompanyResearchController::class, 'destroy'])->name('projects.company_research.destroy');
     
     // Salary Comparisons
-    Route::resource('projects.salary_comparisons', SalaryComparisonController::class)->shallow();
+    // Route::resource('projects.salary_comparisons', SalaryComparisonController::class)->shallow();
     
     // AI Questions
-    Route::resource('projects.ai_questions', AiQuestionController::class)->shallow();
+    // Route::resource('projects.ai_questions', AiQuestionController::class)->shallow();
     
     // Search Strings
-    Route::resource('projects.search_strings', SearchStringController::class)->shallow();
+    // Route::resource('projects.search_strings', SearchStringController::class)->shallow();
     
     // Candidates & CV Analyzer
     Route::get('/candidates', [CandidateController::class, 'index'])->name('candidates.index');
@@ -132,7 +132,7 @@ Route::middleware(['auth', 'verified', 'active'])->group(function () {
     Route::post('/projects/{project}/candidates/{candidate}/profiles/{profile}/submissions', [CandidateProfileSubmissionController::class, 'store'])->name('projects.candidates.profiles.submissions.store');
     
     // Keywords
-    Route::resource('projects.keywords', KeywordController::class)->shallow();
+    // Route::resource('projects.keywords', KeywordController::class)->shallow();
         
     // User Profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

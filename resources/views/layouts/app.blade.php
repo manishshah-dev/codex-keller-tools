@@ -76,9 +76,10 @@
                 // Start collapsed on both desktop and mobile
                 if (window.innerWidth < 1024) {
                     sidebar.classList.add('-translate-x-full');
+                    sidebar.setAttribute('data-collapsed', 'true');
                     sidebarOverlay.classList.add('hidden');
                 } else {
-                    sidebar.setAttribute('data-collapsed', 'true');
+                    // sidebar.setAttribute('data-collapsed', 'true');
                 }
 
                 sidebarToggle?.addEventListener('click', toggleSidebar);

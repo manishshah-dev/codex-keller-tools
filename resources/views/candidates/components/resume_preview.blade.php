@@ -7,15 +7,50 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
                     </svg>
-                    View PDF
+                    View Resume
                 </a>
             @endif
         </div>
         
         @if($candidate->resume_path)
-            {{-- Add the canvas for PDF.js rendering --}}
+            @php
+                $extension = strtolower(pathinfo($candidate->resume_path, PATHINFO_EXTENSION));
+                $resumeUrl = route('candidates.resume.view', $candidate);
+                $downloadUrl = route('candidates.resume.download', $candidate);
+                
+            @endphp
             <div class="mb-4">
-                <canvas id="resume-pdf-canvas" style="border: 1px solid black; width: 100%; height: 100%;"></canvas> {{-- Adjust height as needed --}}
+                @if($extension === 'pdf')
+                    <iframe src="{{ $resumeUrl }}" type="application/pdf" width="100%" height="600px" style="border: 1px solid #ccc;"></iframe>
+                @elseif(in_array($extension, ['doc', 'docx']))
+                    @php
+                        $signedUrl = URL::temporarySignedRoute('candidates.resume.public', now()->addMinutes(60), $candidate);
+                    @endphp
+                    <iframe
+                        src="https://view.officeapps.live.com/op/embed.aspx?src={{ urlencode($signedUrl) }}"
+                        width="100%" height="600" frameborder="0">
+                    </iframe>
+                @else
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
+                            </svg>
+                            <div>
+                                <p class="text-sm text-gray-700 font-medium">File Preview Not Available</p>
+                                <p class="text-xs text-gray-600">Preview not supported for {{ strtoupper($extension) }} files.</p>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <a href="{{ $downloadUrl }}" class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                </svg>
+                                Download File
+                            </a>
+                        </div>
+                    </div>
+                @endif
             </div>
             @if($candidate->resume_text)
                 <details class="mb-4">
@@ -33,65 +68,3 @@
     </div>
 </div>
 
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        @if($candidate->resume_path)
-            const pdfUrl = "{{ route('candidates.resume.view', $candidate) }}";
-            const pdfjsLib = window['pdfjs-dist/build/pdf'];
-
-            // Setting worker path is crucial for PDF.js to work
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-            const canvas = document.getElementById('resume-pdf-canvas');
-            const context = canvas.getContext('2d');
-
-            if (canvas && pdfUrl) {
-                const loadingTask = pdfjsLib.getDocument(pdfUrl);
-                loadingTask.promise.then(function(pdf) {
-                    
-                    // Fetch the first page
-                    const pageNumber = 1;
-                    pdf.getPage(pageNumber).then(function(page) {
-                        
-                        const viewport = page.getViewport({scale: 1.5}); // Adjust scale as needed
-
-                        // Prepare canvas using PDF page dimensions
-                        canvas.height = viewport.height;
-                        canvas.width = viewport.width;
-                        
-                        // Render PDF page into canvas context
-                        const renderContext = {
-                            canvasContext: context,
-                            viewport: viewport
-                        };
-                        const renderTask = page.render(renderContext);
-                        renderTask.promise.then(function () {
-                            // console.log('Page rendered');
-                        }).catch(function (reason) {
-                            console.error('Error rendering page: ' + reason);
-                            context.font = "16px Arial";
-                            context.fillStyle = "red";
-                            context.textAlign = "center";
-                            context.fillText("Error rendering PDF page.", canvas.width/2, canvas.height/2);
-                        });
-                    }).catch(function (reason) {
-                        console.error('Error getting page: ' + reason);
-                        context.font = "16px Arial";
-                        context.fillStyle = "red";
-                        context.textAlign = "center";
-                        context.fillText("Error loading PDF page.", canvas.width/2, canvas.height/2);
-                    });
-                }).catch(function (reason) {
-                    // PDF loading error
-                    const ctx = canvas.getContext('2d');
-                    ctx.font = "16px Arial";
-                    ctx.fillStyle = "red";
-                    ctx.textAlign = "center";
-                    ctx.fillText("Error loading PDF. Ensure the file exists and is accessible.", canvas.width/2, canvas.height/2);
-                });
-            }
-        @endif
-    });
-</script>
