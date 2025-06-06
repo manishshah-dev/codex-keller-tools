@@ -19,7 +19,7 @@ use App\Http\Controllers\TrashController;
 use App\Http\Controllers\CandidateProfileController;
 use App\Http\Controllers\CandidateProfileSubmissionController;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\WorkableSettingController;
+use App\Http\Controllers\IntegrationSettingController;
 use App\Http\Controllers\WorkableJobController;
 use Illuminate\Support\Facades\Route;
 
@@ -195,8 +195,8 @@ Route::middleware(['auth', 'verified', 'active', 'role:admin'])->group(function 
     Route::put('/ai-settings/prompts/{prompt}', [AISettingController::class, 'updatePrompt'])->name('ai-settings.prompts.update');
     Route::delete('/ai-settings/prompts/{prompt}', [AISettingController::class, 'destroyPrompt'])->name('ai-settings.prompts.destroy');
 
-    // Workable Settings
-    Route::resource('workable-settings', WorkableSettingController::class)->except(['show']);
+    // Integration Settings
+    Route::resource('integration-settings', IntegrationSettingController::class)->except(['show']);
 
 });
 

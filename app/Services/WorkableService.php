@@ -2,13 +2,13 @@
 
 namespace App\Services;
 
-use App\Models\WorkableSetting;
+use App\Models\IntegrationSetting;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 
 class WorkableService
 {
-    public function listCandidates(WorkableSetting $setting, array $params=[]): array
+    public function listCandidates(IntegrationSetting $setting, array $params=[]): array
     {
         $candidates = [];
         $params['limit'] = 100;
@@ -36,7 +36,7 @@ class WorkableService
         return $candidates;
     }
 
-    public function getCandidate(WorkableSetting $setting, string $id): array
+    public function getCandidate(IntegrationSetting $setting, string $id): array
     {
         $url = "https://{$setting->subdomain}.workable.com/spi/v3/candidates/{$id}";
         $response = Http::withoutVerifying()->withHeaders([
@@ -51,7 +51,7 @@ class WorkableService
         return $response->json();
     }
 
-    public function listJobs(WorkableSetting $setting): array
+    public function listJobs(IntegrationSetting $setting): array
     {
         $jobs = [];
         $next = "https://{$setting->subdomain}.workable.com/spi/v3/jobs?limit=100";
@@ -76,7 +76,7 @@ class WorkableService
         return $jobs;
     }
 
-    public function listJobCandidates(WorkableSetting $setting, string $job_shortcode): array
+    public function listJobCandidates(IntegrationSetting $setting, string $job_shortcode): array
     {
         $candidates = [];
         // $next = "https://{$setting->subdomain}.workable.com/spi/v3/jobs/{$job_shortcode}/candidates?limit=100";

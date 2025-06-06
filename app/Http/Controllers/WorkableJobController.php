@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\WorkableJob;
-use App\Models\WorkableSetting;
+use App\Models\IntegrationSetting;
 use App\Services\WorkableService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,7 +20,7 @@ class WorkableJobController extends Controller
 
     public function fetch(WorkableService $service): RedirectResponse
     {
-        $setting = WorkableSetting::where('is_active', true)->first();
+        $setting = IntegrationSetting::where('integration', 'workable')->where('is_active', true)->first();
         if (!$setting) {
             return redirect()->route('workable-jobs.index')->with('error', 'No active Workable settings found.');
         }

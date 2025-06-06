@@ -2,10 +2,10 @@
     <x-slot name="header">
         <div class="flex justify-between items-center">
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                {{ __('Add Workable Setting') }}
+                {{ __('Add Integration Setting') }}
             </h2>
             <div>
-                <a href="{{ route('workable-settings.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">Back</a>
+                <a href="{{ route('integration-settings.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">Back</a>
             </div>
         </div>
     </x-slot>
@@ -14,17 +14,25 @@
         <div class="max-w-7xl mx-auto">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
-                    <form action="{{ route('workable-settings.store') }}" method="POST" class="space-y-6">
+                    <form action="{{ route('integration-settings.store') }}" method="POST" class="space-y-6">
                         @csrf
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <x-input-label for="integration" :value="__('Integration')" />
+                                <select id="integration" name="integration" class="block mt-1 w-full border-gray-300 rounded-md">
+                                    <option value="workable" {{ old('integration') == 'workable' ? 'selected' : '' }}>Workable</option>
+                                    <option value="brighthire" {{ old('integration') == 'brighthire' ? 'selected' : '' }}>BrightHire</option>
+                                </select>
+                                <x-input-error :messages="$errors->get('integration')" class="mt-2" />
+                            </div>
                             <div>
                                 <x-input-label for="name" :value="__('Name')" />
                                 <x-text-input id="name" class="block mt-1 w-full" type="text" name="name" value="{{ old('name') }}" required />
                                 <x-input-error :messages="$errors->get('name')" class="mt-2" />
                             </div>
                             <div>
-                                <x-input-label for="subdomain" :value="__('Subdomain')" />
-                                <x-text-input id="subdomain" class="block mt-1 w-full" type="text" name="subdomain" value="{{ old('subdomain') }}" required />
+                                <x-input-label for="subdomain" :value="__('Subdomain (Workable only)')" />
+                                <x-text-input id="subdomain" class="block mt-1 w-full" type="text" name="subdomain" value="{{ old('subdomain') }}" />
                                 <x-input-error :messages="$errors->get('subdomain')" class="mt-2" />
                             </div>
                         </div>

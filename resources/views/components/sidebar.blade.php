@@ -48,11 +48,11 @@
                     <span class="nav-text whitespace-nowrap ml-3">{{ __('AI Settings') }}</span>
                 </a>
 
-                <a href="{{ route('workable-settings.index') }}" class="nav-item flex items-center px-4 py-3 text-sm font-medium rounded-lg {{ request()->routeIs('workable-settings.*') ? 'bg-green-50 text-green-700 border-r-2 border-green-500' : 'text-gray-700 hover:bg-gray-50' }}" title="{{ __('Workable Settings') }}">
+                <a href="{{ route('integration-settings.index') }}" class="nav-item flex items-center px-4 py-3 text-sm font-medium rounded-lg {{ request()->routeIs('integration-settings.*') ? 'bg-green-50 text-green-700 border-r-2 border-green-500' : 'text-gray-700 hover:bg-gray-50' }}" title="{{ __('Integration Settings') }}">
                     <svg class="nav-icon h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a1 1 0 001 1h16a1 1 0 001-1V7M3 7l8 5 8-5" />
                     </svg>
-                    <span class="nav-text whitespace-nowrap ml-3">{{ __('Workable Settings') }}</span>
+                    <span class="nav-text whitespace-nowrap ml-3">{{ __('Integration Settings') }}</span>
                 </a>
 
                 <a href="{{ route('workable-jobs.index') }}" class="nav-item flex items-center px-4 py-3 text-sm font-medium rounded-lg {{ request()->routeIs('workable-jobs.*') ? 'bg-green-50 text-green-700 border-r-2 border-green-500' : 'text-gray-700 hover:bg-gray-50' }}" title="{{ __('Workable Jobs') }}">

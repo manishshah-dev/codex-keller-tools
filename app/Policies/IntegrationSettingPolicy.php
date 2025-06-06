@@ -3,10 +3,10 @@
 namespace App\Policies;
 
 use App\Models\User;
-use App\Models\WorkableSetting;
+use App\Models\IntegrationSetting;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
-class WorkableSettingPolicy
+class IntegrationSettingPolicy
 {
     use HandlesAuthorization;
 
@@ -15,7 +15,7 @@ class WorkableSettingPolicy
         return $user->hasRole('admin');
     }
 
-    public function view(User $user, WorkableSetting $setting): bool
+    public function view(User $user, IntegrationSetting $setting): bool
     {
         return $user->hasRole('admin');
     }
@@ -25,12 +25,12 @@ class WorkableSettingPolicy
         return $user->hasRole('admin');
     }
 
-    public function update(User $user, WorkableSetting $setting): bool
+    public function update(User $user, IntegrationSetting $setting): bool
     {
         return $user->hasRole('admin');
     }
 
-    public function delete(User $user, WorkableSetting $setting): bool
+    public function delete(User $user, IntegrationSetting $setting): bool
     {
         return $user->hasRole('admin');
     }
