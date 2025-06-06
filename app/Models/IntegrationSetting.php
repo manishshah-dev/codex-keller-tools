@@ -5,19 +5,20 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class WorkableSetting extends Model
+class IntegrationSetting extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'name',
-        'subdomain',
-        'api_token',
+        'type',
+        'api_endpoint',
+        'api_key',
         'is_active',
         'is_default',
     ];
 
-    protected $hidden = ['api_token'];
+    protected $hidden = ['api_key'];
 
     protected $casts = [
         'is_active' => 'boolean',

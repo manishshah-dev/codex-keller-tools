@@ -2,10 +2,10 @@
     <x-slot name="header">
         <div class="flex justify-between items-center">
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                {{ __('Add Workable Setting') }}
+                {{ __('Add Integration Setting') }}
             </h2>
             <div>
-                <a href="{{ route('workable-settings.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">Back</a>
+                <a href="{{ route('integration-settings.index') }}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">Back</a>
             </div>
         </div>
     </x-slot>
@@ -14,7 +14,7 @@
         <div class="max-w-7xl mx-auto">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900">
-                    <form action="{{ route('workable-settings.store') }}" method="POST" class="space-y-6">
+                    <form action="{{ route('integration-settings.store') }}" method="POST" class="space-y-6">
                         @csrf
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
@@ -23,15 +23,23 @@
                                 <x-input-error :messages="$errors->get('name')" class="mt-2" />
                             </div>
                             <div>
-                                <x-input-label for="subdomain" :value="__('Subdomain')" />
-                                <x-text-input id="subdomain" class="block mt-1 w-full" type="text" name="subdomain" value="{{ old('subdomain') }}" required />
-                                <x-input-error :messages="$errors->get('subdomain')" class="mt-2" />
+                                <x-input-label for="type" :value="__('Type')" />
+                                <select id="type" name="type" class="block mt-1 w-full border-gray-300 focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 rounded-md shadow-sm">
+                                    <option value="workable" {{ old('type') == 'workable' ? 'selected' : '' }}>Workable</option>
+                                    <option value="brighthire" {{ old('type') == 'brighthire' ? 'selected' : '' }}>BrightHire</option>
+                                </select>
+                                <x-input-error :messages="$errors->get('type')" class="mt-2" />
                             </div>
                         </div>
                         <div>
-                            <x-input-label for="api_token" :value="__('API Token')" />
-                            <x-text-input id="api_token" class="block mt-1 w-full" type="password" name="api_token" value="{{ old('api_token') }}" required />
-                            <x-input-error :messages="$errors->get('api_token')" class="mt-2" />
+                            <x-input-label for="api_endpoint" :value="__('API Endpoint')" />
+                            <x-text-input id="api_endpoint" class="block mt-1 w-full" type="text" name="api_endpoint" value="{{ old('api_endpoint') }}" required />
+                            <x-input-error :messages="$errors->get('api_endpoint')" class="mt-2" />
+                        </div>
+                        <div>
+                            <x-input-label for="api_key" :value="__('API Key')" />
+                            <x-text-input id="api_key" class="block mt-1 w-full" type="password" name="api_key" value="{{ old('api_key') }}" required />
+                            <x-input-error :messages="$errors->get('api_key')" class="mt-2" />
                         </div>
                         <div class="flex items-center space-x-4">
                             <div class="flex items-center">

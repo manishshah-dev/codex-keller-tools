@@ -18,6 +18,16 @@
                     </svg>
                     Generate Content
                 </a>
+
+                <form action="{{ route('projects.candidates.profiles.generateWithBrightHire', [$project, $candidate, $profile]) }}" method="POST" class="ml-2">
+                    @csrf
+                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                        <svg class="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.338 0 4.5 4.5 0 01-1.41 8.775H6.75z" />
+                        </svg>
+                        Generate with BrightHire
+                    </button>
+                </form>
             </div>
         </div>
     </x-slot>

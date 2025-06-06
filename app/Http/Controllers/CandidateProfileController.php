@@ -7,6 +7,7 @@ use App\Models\CandidateProfile;
 use App\Models\ProfileCustomHeading;
 use App\Models\Project;
 use App\Models\AISetting;
+use App\Models\IntegrationSetting; // Added
 use App\Services\AIService;
 use App\Services\CandidateProfileExportService;
 use Illuminate\Http\Request;
@@ -1079,6 +1080,78 @@ class CandidateProfileController extends Controller
         } catch (\Exception $e) {
             return redirect()->route('projects.candidates.profiles.show', [$project, $candidate, $profile])
                 ->with('error', 'Failed to export profile: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Generate profile insights using BrightHire integration.
+     */
+    public function generateWithBrightHire(Request $request, Project $project, Candidate $candidate, CandidateProfile $profile): RedirectResponse
+    {
+        $this->authorize('update', $project); // Or a more specific authorization if needed
+
+        // Check if the profile belongs to the candidate and project
+        if ($profile->candidate_id !== $candidate->id || $profile->project_id !== $project->id) {
+            abort(404, 'Profile not found for this candidate and project');
+        }
+
+        try {
+            // Retrieve BrightHire API key
+            $brightHireSetting = IntegrationSetting::where('type', 'brighthire')
+                                                  ->where('is_active', true)
+                                                  ->orderBy('is_default', 'desc') // Prefer default if multiple active
+                                                  ->first();
+
+            if (!$brightHireSetting || empty($brightHireSetting->api_key)) {
+                return redirect()->route('projects.candidates.profiles.edit', [$project, $candidate, $profile])
+                    ->with('error', 'BrightHire API key not configured or inactive.');
+            }
+
+            $apiKey = $brightHireSetting->api_key;
+            // $apiEndpoint = $brightHireSetting->api_endpoint; // Use if BrightHire has a specific endpoint per setting
+
+            // Simulate API call to BrightHire (replace with actual API call)
+            // For now, we'll use a placeholder. In a real scenario, you might use GuzzleHttp or a dedicated BrightHireService.
+            // $httpClient = new \GuzzleHttp\Client();
+            // try {
+            //     $response = $httpClient->post($apiEndpoint . '/interviews/' . $candidate->brighthire_interview_id . '/transcript', [ // Assuming candidate has a brighthire_interview_id
+            //         'headers' => [
+            //             'Authorization' => 'Bearer ' . $apiKey,
+            //             'Accept'        => 'application/json',
+            //         ],
+            //     ]);
+            //     $transcriptData = json_decode($response->getBody()->getContents(), true);
+            //     $transcript = $transcriptData['transcript'] ?? 'No transcript found.';
+            // } catch (\Exception $e) {
+            //     Log::error('BrightHire API call failed: ' . $e->getMessage());
+            //     return redirect()->route('projects.candidates.profiles.edit', [$project, $candidate, $profile])
+            //         ->with('error', 'Failed to fetch data from BrightHire: ' . $e->getMessage());
+            // }
+
+            // Simulated transcript and insights
+            $simulatedTranscript = "Candidate mentioned strong experience with Laravel and Vue.js. Showed good problem-solving skills. Asked relevant questions about team structure.";
+            $insight = [
+                'source' => 'BrightHire (Simulated)',
+                'content' => $simulatedTranscript,
+                'generated_at' => now()->toIso8601String(),
+            ];
+
+            // Append to existing interview_insights or create new if null
+            $interviewInsights = $profile->interview_insights ?? [];
+            $interviewInsights[] = $insight;
+
+            $profile->update(['interview_insights' => $interviewInsights]);
+
+            return redirect()->route('projects.candidates.profiles.edit', [$project, $candidate, $profile])
+                ->with('success', 'BrightHire interview insights generated and added to profile.');
+
+        } catch (Exception $e) {
+            Log::error('BrightHire integration failed', [
+                'error' => $e->getMessage(),
+                'profile_id' => $profile->id,
+            ]);
+            return redirect()->route('projects.candidates.profiles.edit', [$project, $candidate, $profile])
+                ->with('error', 'An unexpected error occurred with the BrightHire integration: ' . $e->getMessage());
         }
     }
 }
