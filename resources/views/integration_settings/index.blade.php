@@ -2,11 +2,11 @@
     <x-slot name="header">
         <div class="flex justify-between items-center">
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                {{ __('Workable Settings') }}
+                {{ __('Integration Settings') }}
             </h2>
             <div>
-                <a href="{{ route('workable-settings.create') }}" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
-                    Add Workable Account
+                <a href="{{ route('integration-settings.create') }}" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+                    Add Integration
                 </a>
             </div>
         </div>
@@ -28,6 +28,7 @@
                             <table class="min-w-full bg-white">
                                 <thead class="bg-gray-100">
                                     <tr>
+                                        <th class="py-2 px-4 text-left">Integration</th>
                                         <th class="py-2 px-4 text-left">Name</th>
                                         <th class="py-2 px-4 text-left">Subdomain</th>
                                         <th class="py-2 px-4 text-left">Active</th>
@@ -38,6 +39,7 @@
                                 <tbody>
                                     @foreach($settings as $setting)
                                         <tr>
+                                            <td class="py-2 px-4">{{ ucfirst($setting->integration) }}</td>
                                             <td class="py-2 px-4">{{ $setting->name }}</td>
                                             <td class="py-2 px-4">{{ $setting->subdomain }}</td>
                                             <td class="py-2 px-4">
@@ -52,8 +54,8 @@
                                             </td>
                                             <td class="py-2 px-4">
                                                 <div class="flex space-x-2">
-                                                    <a href="{{ route('workable-settings.edit', $setting) }}" class="text-blue-600 hover:text-blue-900">Edit</a>
-                                                    <form action="{{ route('workable-settings.destroy', $setting) }}" method="POST" class="inline">
+                                                    <a href="{{ route('integration-settings.edit', $setting) }}" class="text-blue-600 hover:text-blue-900">Edit</a>
+                                                    <form action="{{ route('integration-settings.destroy', $setting) }}" method="POST" class="inline">
                                                         @csrf
                                                         @method('DELETE')
                                                         <button type="submit" class="text-red-600 hover:text-red-900" onclick="return confirm('Delete this setting?')">Delete</button>
@@ -66,7 +68,7 @@
                             </table>
                         </div>
                     @else
-                        <p class="text-gray-600">No Workable settings configured.</p>
+                        <p class="text-gray-600">No integration settings configured.</p>
                     @endif
                 </div>
             </div>

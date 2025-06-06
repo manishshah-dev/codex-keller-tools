@@ -170,10 +170,14 @@
                                                     </div>
 
                                                     <div class="col-span-6">
-                                                        <label for="summary" class="block text-sm font-medium text-gray-700">Summary (Optional)</label>
-                                                        <textarea name="summary" id="summary" rows="3" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md">{{ old('summary') }}</textarea>
-                                                        <p class="mt-1 text-sm text-gray-500">A brief summary of the candidate's qualifications and fit for the role.</p>
-                                                    </div>
+                                                    <label for="summary" class="block text-sm font-medium text-gray-700">Summary (Optional)</label>
+                                                    <textarea name="summary" id="summary" rows="3" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md">{{ old('summary') }}</textarea>
+                                                    <p class="mt-1 text-sm text-gray-500">A brief summary of the candidate's qualifications and fit for the role.</p>
+                                                </div>
+                                                <div class="col-span-6">
+                                                    <label for="brighthire_interview_id" class="block text-sm font-medium text-gray-700">BrightHire Interview ID (Optional)</label>
+                                                    <input type="text" name="brighthire_interview_id" id="brighthire_interview_id" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" value="{{ old('brighthire_interview_id') }}">
+                                                </div>
                                                 </div>
                                             </div>
                                             <div class="px-4 py-3 bg-gray-50 text-right sm:px-6">
@@ -230,6 +234,10 @@
                                                         <select id="ai_model" name="ai_model" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                                                             <!-- Will be populated by JavaScript -->
                                                         </select>
+                                                    </div>
+                                                    <div class="col-span-6">
+                                                        <label for="ai_brighthire_id" class="block text-sm font-medium text-gray-700">BrightHire Interview ID (Optional)</label>
+                                                        <input type="text" name="brighthire_interview_id" id="ai_brighthire_id" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" value="{{ old('brighthire_interview_id') }}">
                                                     </div>
                                                 </div>
                                             </div>

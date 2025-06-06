@@ -26,6 +26,7 @@ class CandidateProfile extends Model
         'extracted_data',
         'interview_insights',
         'web_presence_data',
+        'brighthire_interview_id',
         'is_finalized',
         'finalized_at',
         'status',

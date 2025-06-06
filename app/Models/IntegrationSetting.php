@@ -5,11 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class WorkableSetting extends Model
+class IntegrationSetting extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'integration',
         'name',
         'subdomain',
         'api_token',

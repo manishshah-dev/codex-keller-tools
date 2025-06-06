@@ -9,6 +9,8 @@ use App\Models\Project;
 use App\Models\AISetting;
 use App\Services\AIService;
 use App\Services\CandidateProfileExportService;
+use App\Services\BrightHireService;
+use App\Models\IntegrationSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
@@ -126,6 +128,7 @@ class CandidateProfileController extends Controller
             'summary' => 'nullable|string',
             'ai_setting_id' => 'nullable|exists:ai_settings,id',
             'ai_model' => 'nullable|string',
+            'brighthire_interview_id' => 'nullable|string',
         ]);
         
         // Get the AI setting if provided
@@ -141,6 +144,7 @@ class CandidateProfileController extends Controller
             'user_id' => Auth::id(),
             'title' => $validated['title'],
             'summary' => $validated['summary'] ?? null,
+            'brighthire_interview_id' => $validated['brighthire_interview_id'] ?? null,
             'status' => 'draft',
             'ai_provider' => $aiSetting ? $aiSetting->provider : null,
             'ai_model' => $validated['ai_model'] ?? null,
@@ -226,6 +230,7 @@ class CandidateProfileController extends Controller
             'headings.*.content' => 'nullable|array',
             'headings.*.order' => 'nullable|integer',
             'extracted_data' => 'nullable|array',
+            'brighthire_interview_id' => 'nullable|string',
             'finalize' => 'nullable|boolean',
         ]);
         
@@ -233,6 +238,7 @@ class CandidateProfileController extends Controller
         $profile->update([
             'title' => $validated['title'],
             'summary' => $validated['summary'],
+            'brighthire_interview_id' => $validated['brighthire_interview_id'] ?? $profile->brighthire_interview_id,
         ]);
 
 
@@ -568,8 +574,14 @@ class CandidateProfileController extends Controller
         if (!is_array($extractedData)) {
             $extractedData = $this->getDefaultExtractedData($candidate);
         }
-        
+
         $profile->update(['extracted_data' => $extractedData]);
+
+        $insights = $this->analyzeInterviewTranscript($aiService, $aiSetting, $model, $profile);
+        if ($insights) {
+            $profile->update(['interview_insights' => $insights]);
+            $extractedData['interview_insights'] = $insights;
+        }
         
         // Generate summary
         $summary = $this->generateSummary($aiService, $aiSetting, $model, $candidate, $extractedData, $prompts['summary'] ?? null);
@@ -611,6 +623,14 @@ class CandidateProfileController extends Controller
             $profile->update(['extracted_data' => $extractedData]);
         } else {
             $extractedData = $profile->extracted_data;
+        }
+
+        if ($profile->interview_insights) {
+            $extractedData['interview_insights'] = $profile->interview_insights;
+        }
+
+        if ($profile->interview_insights) {
+            $extractedData['interview_insights'] = $profile->interview_insights;
         }
         
         // If custom headings are provided, use those
@@ -816,6 +836,42 @@ class CandidateProfileController extends Controller
                 'publications' => [],
             ],
         ];
+    }
+
+    /**
+     * Analyze BrightHire transcript and return insights.
+     */
+    private function analyzeInterviewTranscript(AIService $aiService, AISetting $aiSetting, string $model, CandidateProfile $profile): ?array
+    {
+        if (!$profile->brighthire_interview_id) {
+            return null;
+        }
+
+        $setting = IntegrationSetting::where('integration', 'brighthire')->where('is_active', true)->first();
+        if (!$setting) {
+            return null;
+        }
+
+        $service = new BrightHireService();
+        $transcript = $service->getTranscript($setting, $profile->brighthire_interview_id);
+        if (!$transcript) {
+            return null;
+        }
+
+        $prompt = "Summarize the following interview transcript in bullet points highlighting notable skills, experiences and concerns. Return JSON: {\"insights\": [\"...\"]}.\n\nTRANSCRIPT:\n{{transcript}}";
+        $formatted = str_replace('{{transcript}}', $transcript, $prompt);
+
+        $response = $aiService->generateContent(
+            $aiSetting,
+            $model,
+            $formatted,
+            ['response_format' => 'json_object'],
+            Auth::id(),
+            'interview_analysis'
+        );
+
+        $data = json_decode($response['content'], true);
+        return $data['insights'] ?? null;
     }
 
     /**

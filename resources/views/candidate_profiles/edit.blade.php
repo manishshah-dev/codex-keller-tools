@@ -76,6 +76,12 @@
                                         </div>
                                         <p class="mt-2 text-sm text-gray-500">A brief summary of the candidate's qualifications and fit for the role.</p>
                                     </div>
+                                    <div class="sm:col-span-6">
+                                        <label for="brighthire_interview_id" class="block text-sm font-medium text-gray-700">BrightHire Interview ID (Optional)</label>
+                                        <div class="mt-1">
+                                            <input type="text" name="brighthire_interview_id" id="brighthire_interview_id" class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md" value="{{ old('brighthire_interview_id', $profile->brighthire_interview_id) }}">
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

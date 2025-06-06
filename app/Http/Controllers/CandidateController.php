@@ -26,7 +26,7 @@ use Smalot\PdfParser\Parser;
 use PhpOffice\PhpWord\IOFactory;
 use App\Services\ModelRegistryService; // Import the service
 use App\Services\WorkableService;
-use App\Models\WorkableSetting;
+use App\Models\IntegrationSetting;
 use App\Models\WorkableJob;
 use Symfony\Component\HttpFoundation\StreamedResponse; // For file response
 
@@ -79,7 +79,7 @@ class CandidateController extends Controller
         $jobs = WorkableJob::all();
 
         $workableCandidates = [];
-        $workableSetting = WorkableSetting::where('is_active', true)->first();
+        $workableSetting = IntegrationSetting::where('integration', 'workable')->where('is_active', true)->first();
         if ($workableSetting && $request->query('workable_job')) {
             try {
                 $job = WorkableJob::find($request->query('workable_job'));
@@ -652,7 +652,7 @@ class CandidateController extends Controller
             'workable_candidates.*' => 'string',
         ]);
 
-        $setting = WorkableSetting::where('is_active', true)->first();
+        $setting = IntegrationSetting::where('integration', 'workable')->where('is_active', true)->first();
         if (!$setting) {
             return redirect()->route('projects.candidates.index', $project)
                 ->with('error', 'No active Workable settings found.');
